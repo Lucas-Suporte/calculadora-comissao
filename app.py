@@ -75,7 +75,19 @@ if uploaded_file and funcionario and mes_referencia:
     try:
         df = pd.read_csv(uploaded_file, engine="python")
         df = df[df["SERVICO"].notna() & (df["SERVICO"].str.strip() != "")]
-        df["VALOR"] = df["VALOR"].astype(str).str.replace("R$", "").str.replace(".", "").str.replace(",", ".").astype(float)
+
+        # =========================
+        # Limpa e converte VALOR
+        # =========================
+        df["VALOR"] = (
+            df["VALOR"].astype(str)
+            .str.replace("R$", "", regex=False)
+            .str.replace(".", "", regex=False)
+            .str.replace(",", ".", regex=False)
+            .str.strip()
+        )
+        df["VALOR"] = pd.to_numeric(df["VALOR"], errors="coerce").fillna(0)
+
         df["SERVICO"] = df["SERVICO"].str.strip()
 
         resultados = []
@@ -119,7 +131,10 @@ if uploaded_file and funcionario and mes_referencia:
         # =========================
         st.subheader("Resumo por Serviço")
         for item in resultados:
-            st.markdown(f"<div class='card'><h3>{item['Serviço']}</h3><p>Quantidade: {item['Quantidade']}<br>% Aplicada: {item['% Aplicada']}<br>Comissão: R$ {item['Comissão (R$)']:.2f}</p></div>", unsafe_allow_html=True)
+            st.markdown(
+                f"<div class='card'><h3>{item['Serviço']}</h3><p>Quantidade: {item['Quantidade']}<br>% Aplicada: {item['% Aplicada']}<br>Comissão: R$ {item['Comissão (R$)']:.2f}</p></div>",
+                unsafe_allow_html=True
+            )
 
         # =========================
         # PDF final
