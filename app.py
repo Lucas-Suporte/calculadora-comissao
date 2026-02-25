@@ -1,7 +1,5 @@
 import streamlit as st
 import pandas as pd
-from fpdf import FPDF
-from io import BytesIO
 import os
 
 st.set_page_config(layout="wide")
@@ -38,14 +36,14 @@ with col2:
 uploaded_file = st.file_uploader("Envie a planilha CSV", type=["csv"])
 
 # =========================
-# CONFIGURAÇÃO DE METAS
+# CONFIGURAÇÃO DE METAS E PORCENTAGENS
 # =========================
 META_CONFIG = {
-    "BANHO": {"bronze":150,"prata":180,"ouro":200,"percent_bronze":0.05,"percent_prata":0.07,"percent_ouro":0.10},
-    "TOSA HIGIENICA": {"bronze":80,"prata":100,"ouro":120,"percent_bronze":0.05,"percent_prata":0.07,"percent_ouro":0.10},
-    "TOSA MAQUINA": {"bronze":60,"prata":80,"ouro":100,"percent_bronze":0.05,"percent_prata":0.07,"percent_ouro":0.10},
-    "TOSA TESOURA": {"bronze":40,"prata":55,"ouro":70,"percent_bronze":0.05,"percent_prata":0.07,"percent_ouro":0.10},
-    "TRATAMENTOS": {"bronze":40,"prata":55,"ouro":70,"percent_bronze":0.05,"percent_prata":0.07,"percent_ouro":0.10},
+    "BANHO": {"base":3,"meta":4,"super":5,"bronze":150,"prata":180,"ouro":200},
+    "TOSA HIGIENICA": {"base":10,"meta":15,"super":20,"bronze":80,"prata":100,"ouro":120},
+    "TOSA MAQUINA": {"base":10,"meta":15,"super":20,"bronze":60,"prata":80,"ouro":100},
+    "TOSA TESOURA": {"base":15,"meta":20,"super":25,"bronze":40,"prata":55,"ouro":70},
+    "TRATAMENTOS": {"base":15,"meta":20,"super":25,"bronze":40,"prata":55,"ouro":70},
 }
 
 # =========================
@@ -76,9 +74,7 @@ if uploaded_file and funcionario and mes_referencia:
         df = pd.read_csv(uploaded_file, engine="python")
         df = df[df["SERVICO"].notna() & (df["SERVICO"].str.strip() != "")]
 
-        # =========================
         # Limpa e converte VALOR
-        # =========================
         df["VALOR"] = (
             df["VALOR"].astype(str)
             .str.replace("R$", "", regex=False)
@@ -100,15 +96,15 @@ if uploaded_file and funcionario and mes_referencia:
             qtd = filtro.sum()
             faturamento = df.loc[filtro, "VALOR"].sum()
 
-            # Percentual aplicado conforme meta
+            # Percentual aplicado conforme meta atingida
             if qtd >= metas["ouro"]:
-                pct = metas["percent_ouro"]
+                pct = metas["super"]/100
             elif qtd >= metas["prata"]:
-                pct = metas["percent_prata"]
+                pct = metas["meta"]/100
             elif qtd >= metas["bronze"]:
-                pct = metas["percent_bronze"]
+                pct = metas["base"]/100
             else:
-                pct = 0.03
+                pct = metas["base"]/100  # aplica base mesmo se não atingiu bronze
 
             comissao = faturamento * pct
             total_comissao += comissao
@@ -137,42 +133,11 @@ if uploaded_file and funcionario and mes_referencia:
             )
 
         # =========================
-        # PDF final
+        # Total
         # =========================
-        class PDF(FPDF):
-            def header(self):
-                if os.path.exists("logo.png"):
-                    self.image("logo.png", 10, 8, 50)
-                self.set_font('Arial', 'B', 14)
-                self.cell(0, 10, f'Relatório de Comissão - {funcionario}', ln=True, align='C')
-                self.set_font('Arial', '', 12)
-                self.cell(0, 8, f'Mês de Referência: {mes_referencia}', ln=True, align='C')
-                self.ln(10)
-
-        pdf = PDF()
-        pdf.add_page()
-        pdf.set_font("Arial", '', 12)
-        pdf.cell(50,10,"Serviço",1)
-        pdf.cell(30,10,"Qtd",1)
-        pdf.cell(30,10,"% Aplicada",1)
-        pdf.cell(40,10,"Comissão (R$)",1)
-        pdf.ln()
-
-        for item in resultados:
-            pdf.cell(50,10,item["Serviço"],1)
-            pdf.cell(30,10,str(item["Quantidade"]),1)
-            pdf.cell(30,10,item["% Aplicada"],1)
-            pdf.cell(40,10,f'{item["Comissão (R$)"]:.2f}',1)
-            pdf.ln()
-
-        pdf.ln(5)
-        pdf.set_font("Arial",'B',12)
-        pdf.cell(0,10,f"Faturamento Total: R$ {total_faturamento:.2f}",ln=True)
-        pdf.cell(0,10,f"Comissão Total: R$ {total_comissao:.2f}",ln=True)
-
-        output = BytesIO()
-        pdf.output(output)
-        st.download_button("📥 Baixar Relatório em PDF", output.getvalue(), f"Relatorio_{funcionario}.pdf", "application/pdf")
+        st.subheader("Resumo Geral")
+        st.write(f"**Faturamento Total:** R$ {total_faturamento:,.2f}")
+        st.write(f"**Comissão Total:** R$ {total_comissao:,.2f}")
 
     except Exception as e:
         st.error(f"Erro ao processar CSV: {e}")
