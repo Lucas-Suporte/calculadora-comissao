@@ -15,40 +15,66 @@ VERDE = "#17B3A3"
 logo_path = "logo.png"
 
 # =========================
-# BASE FIXA DE VALORES
+# ESTILO EXECUTIVO
 # =========================
+st.markdown("""
+<style>
+body { background-color: #f4f6f9; }
 
-VALORES = {
-    1: {"BANHO":65,"TOSA HIGIENICA":100,"TOSA MAQUINA":130,"TOSA TESOURA":150,"REMOCAO SUBPELO":105},
-    2: {"BANHO":75,"TOSA HIGIENICA":110,"TOSA MAQUINA":140,"TOSA TESOURA":160},
-    3: {"BANHO":90,"TOSA HIGIENICA":125,"TOSA MAQUINA":155,"TOSA TESOURA":175,"REMOCAO SUBPELO":135},
-    4: {"BANHO":135,"TOSA HIGIENICA":175,"TOSA MAQUINA":200,"TOSA TESOURA":220},
-    5: {"BANHO":180,"TOSA HIGIENICA":225,"TOSA MAQUINA":245,"TOSA TESOURA":300},
+.kpi {
+    background: linear-gradient(135deg, #0B0F6D, #17B3A3);
+    color: white;
+    padding: 30px;
+    border-radius: 20px;
+    text-align: center;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.25);
+    margin-bottom: 30px;
 }
 
-TRATAMENTOS_VALORES = {
-    "HIDRATACAO":35,
-    "HIGIENE BUCAL":25,
-    "CORTE DE UNHAS":25,
-    "REMOCAO SUBPELO":105
+.card {
+    background: white;
+    padding: 20px;
+    border-radius: 20px;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+    margin-bottom: 25px;
+    transition: all 0.25s ease-in-out;
 }
+.card:hover { transform: translateY(-6px); }
+
+.card-title { font-size: 18px; font-weight: bold; margin-bottom: 8px; }
+
+.progress-bar {
+    height: 8px;
+    border-radius: 10px;
+    background-color: #ddd;
+    margin-top: 8px;
+}
+
+.progress-fill {
+    height: 8px;
+    border-radius: 10px;
+}
+
+.bronze { border-left: 8px solid #cd7f32; }
+.prata { border-left: 8px solid #C0C0C0; }
+.ouro { border-left: 8px solid #FFD700; }
+</style>
+""", unsafe_allow_html=True)
 
 # =========================
 # METAS
 # =========================
-
 META_CONFIG = {
-    "BANHO":{"base":129,"meta":130,"super":176,"pct":[0.03,0.04,0.05]},
-    "TOSA HIGIENICA":{"base":19,"meta":20,"super":40,"pct":[0.10,0.15,0.20]},
-    "TOSA MAQUINA":{"base":14,"meta":15,"super":30,"pct":[0.10,0.15,0.20]},
-    "TOSA TESOURA":{"base":14,"meta":15,"super":30,"pct":[0.15,0.20,0.25]},
-    "TRATAMENTOS":{"base":14,"meta":15,"super":30,"pct":[0.15,0.20,0.25]},
+    "BANHO": {"base_qtd":129,"meta_qtd":130,"super_qtd":176,"pct":[0.03,0.04,0.05]},
+    "TOSA HIGIENICA": {"base_qtd":19,"meta_qtd":20,"super_qtd":40,"pct":[0.10,0.15,0.20]},
+    "TOSA MAQUINA": {"base_qtd":14,"meta_qtd":15,"super_qtd":30,"pct":[0.10,0.15,0.20]},
+    "TOSA TESOURA": {"base_qtd":14,"meta_qtd":15,"super_qtd":30,"pct":[0.15,0.20,0.25]},
+    "TRATAMENTOS": {"base_qtd":14,"meta_qtd":15,"super_qtd":30,"pct":[0.15,0.20,0.25]},
 }
 
 # =========================
 # HEADER
 # =========================
-
 st.markdown("<div style='text-align:center;'>", unsafe_allow_html=True)
 if os.path.exists(logo_path):
     st.image(logo_path, width=250)
@@ -56,8 +82,6 @@ st.markdown(f"<h1 style='color:{AZUL};'>Dashboard Performance</h1>", unsafe_allo
 st.markdown(f"<h3 style='color:{VERDE};'>PET247 Market</h3>", unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
 st.markdown("---")
-
-grupo = st.selectbox("Grupo do Pet (1 a 5)", [1,2,3,4,5])
 
 uploaded_file = st.file_uploader("Envie a planilha (.xlsx ou .csv)", type=["xlsx","csv"])
 nome = st.text_input("Nome do Profissional")
@@ -79,26 +103,61 @@ if uploaded_file:
         df = pd.read_excel(uploaded_file)
 
     df.columns = df.columns.str.upper().str.strip()
-    df = df[["SERVICO"]].dropna()
+
+    if "SERVICO" not in df.columns or "VALOR" not in df.columns:
+        st.error("A planilha precisa conter SERVICO e VALOR.")
+        st.stop()
+
+    df = df[["SERVICO","VALOR"]].dropna()
+    df["VALOR"] = pd.to_numeric(df["VALOR"].astype(str).str.replace(",", "."), errors="coerce")
+    df = df.dropna()
 
     registros = []
 
     for _, row in df.iterrows():
-        servicos = [s.strip().upper() for s in row["SERVICO"].split("+")]
+        servicos = [s.strip().upper() for s in str(row["SERVICO"]).split("+")]
+        valor_total = row["VALOR"]
 
-        for s in servicos:
-            categoria = classificar(s)
-
-            if categoria == "TRATAMENTOS":
-                valor = TRATAMENTOS_VALORES.get(s,0)
-            else:
-                valor = VALORES[grupo].get(categoria,0)
-
+        # Serviço único mantém valor original
+        if len(servicos) == 1:
+            s = servicos[0]
             registros.append({
-                "SERVICO":s,
-                "CATEGORIA":categoria,
-                "VALOR":valor
+                "SERVICO": s,
+                "CATEGORIA": classificar(s),
+                "VALOR": valor_total
             })
+
+        else:
+            valor_restante = valor_total
+
+            # Valores fixos quando compostos
+            for s in servicos:
+                if "HIGIENICA" in s:
+                    valor = 20
+                    valor_restante -= 20
+                    registros.append({
+                        "SERVICO": s,
+                        "CATEGORIA": classificar(s),
+                        "VALOR": valor
+                    })
+
+                elif "HIDRATACAO" in s:
+                    valor = 30
+                    valor_restante -= 30
+                    registros.append({
+                        "SERVICO": s,
+                        "CATEGORIA": classificar(s),
+                        "VALOR": valor
+                    })
+
+            # Serviço principal recebe restante
+            for s in servicos:
+                if "HIGIENICA" not in s and "HIDRATACAO" not in s:
+                    registros.append({
+                        "SERVICO": s,
+                        "CATEGORIA": classificar(s),
+                        "VALOR": valor_restante
+                    })
 
     df_final = pd.DataFrame(registros)
 
@@ -108,26 +167,34 @@ if uploaded_file:
     ).reset_index()
 
     total_comissao = 0
-    linhas = []
+    linhas_resumo = []
+
+    nomes_formatados = {
+        "BANHO": "Banho",
+        "TOSA HIGIENICA": "Tosa Higiênica",
+        "TOSA MAQUINA": "Tosa à Máquina",
+        "TOSA TESOURA": "Tosa à Tesoura",
+        "TRATAMENTOS": "Tratamentos"
+    }
 
     for _, row in resumo.iterrows():
-        cat = row["CATEGORIA"]
+        categoria = row["CATEGORIA"]
         qtd = row["QUANTIDADE"]
         fat = row["FATURAMENTO"]
-        meta = META_CONFIG[cat]
+        cfg = META_CONFIG[categoria]
 
-        if qtd >= meta["super"]:
-            pct = meta["pct"][2]; faixa="SUPER META"
-        elif qtd >= meta["meta"]:
-            pct = meta["pct"][1]; faixa="META"
+        if qtd >= cfg["super_qtd"]:
+            pct = cfg["pct"][2]; faixa="SUPER META"
+        elif qtd >= cfg["meta_qtd"]:
+            pct = cfg["pct"][1]; faixa="META"
         else:
-            pct = meta["pct"][0]; faixa="BASE"
+            pct = cfg["pct"][0]; faixa="BASE"
 
         comissao = fat * pct
         total_comissao += comissao
 
-        linhas.append([
-            cat,
+        linhas_resumo.append([
+            nomes_formatados[categoria],
             qtd,
             f"R$ {fat:,.2f}",
             f"{pct*100:.0f}%",
@@ -135,20 +202,62 @@ if uploaded_file:
             faixa
         ])
 
-    tabela = pd.DataFrame(linhas, columns=[
-        "Categoria","Qtd","Faturamento",
+    tabela_resumo = pd.DataFrame(linhas_resumo, columns=[
+        "Categoria","Quantidade","Faturamento",
         "% Aplicada","Comissão","Faixa"
     ])
 
-    col1, col2 = st.columns([2,1])
+    # KPI
+    st.markdown(f"""
+    <div class="kpi">
+        <h3>Comissão Total do Mês</h3>
+        <h1>R$ {total_comissao:,.2f}</h1>
+    </div>
+    """, unsafe_allow_html=True)
 
-    with col1:
-        st.subheader("Resumo Geral")
-        st.dataframe(tabela, use_container_width=True)
+    # Dashboard Cards
+    st.subheader("Performance por Categoria")
 
-    with col2:
-        st.subheader("Dashboard")
-        st.success(f"Comissão Total\nR$ {total_comissao:,.2f}")
+    col1, col2 = st.columns(2)
+
+    for i, row in resumo.iterrows():
+        categoria = row["CATEGORIA"]
+        qtd = row["QUANTIDADE"]
+        fat = row["FATURAMENTO"]
+        cfg = META_CONFIG[categoria]
+
+        if qtd >= cfg["super_qtd"]:
+            pct = cfg["pct"][2]; classe="ouro"; medalha="🥇 Ouro"
+        elif qtd >= cfg["meta_qtd"]:
+            pct = cfg["pct"][1]; classe="prata"; medalha="🥈 Prata"
+        else:
+            pct = cfg["pct"][0]; classe="bronze"; medalha="🥉 Bronze"
+
+        comissao = fat * pct
+        progresso = min((qtd / cfg["super_qtd"]) * 100, 100)
+
+        card_html = f"""
+        <div class="card {classe}">
+            <div class="card-title">{nomes_formatados[categoria]} — {medalha}</div>
+            <div>Quantidade: <b>{qtd}</b></div>
+            <div>Faturamento: <b>R$ {fat:,.2f}</b></div>
+            <div>% Aplicada: <b>{pct*100:.0f}%</b></div>
+            <div>Comissão: <b>R$ {comissao:,.2f}</b></div>
+            <div class="progress-bar">
+                <div class="progress-fill" style="width:{progresso}%; background:#17B3A3;"></div>
+            </div>
+        </div>
+        """
+
+        if i % 2 == 0:
+            with col1:
+                st.markdown(card_html, unsafe_allow_html=True)
+        else:
+            with col2:
+                st.markdown(card_html, unsafe_allow_html=True)
+
+    st.subheader("Resumo Geral")
+    st.dataframe(tabela_resumo, use_container_width=True)
 
     # PDF
     if st.button("Exportar PDF"):
@@ -167,7 +276,7 @@ if uploaded_file:
         elements.append(Paragraph(f"Mês: {mes}", styles["Normal"]))
         elements.append(Spacer(1,12))
 
-        tabela_pdf = Table([tabela.columns.tolist()] + tabela.values.tolist())
+        tabela_pdf = Table([tabela_resumo.columns.tolist()] + tabela_resumo.values.tolist())
         tabela_pdf.setStyle(TableStyle([
             ('BACKGROUND',(0,0),(-1,0),colors.HexColor(AZUL)),
             ('TEXTCOLOR',(0,0),(-1,0),colors.white),
