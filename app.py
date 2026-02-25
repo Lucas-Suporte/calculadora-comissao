@@ -5,18 +5,18 @@ import os
 st.set_page_config(layout="wide")
 
 # =========================
-# CSS moderno para cards lado a lado
+# CSS moderno para cards e tabela
 # =========================
 st.markdown("""
 <style>
 body { background-color: #F4F6F9; font-family: 'Arial', sans-serif; }
 .kpi {background: linear-gradient(135deg, #0B0F6D, #1B75BC); color: white; padding: 30px; border-radius: 20px; text-align: center; margin-bottom: 30px;}
-.card {padding: 12px; border-radius: 12px; margin: 5px; color: white; text-align: center; font-size: 14px;}
-.banho {background: linear-gradient(135deg, #0B0F6D, #1B75BC);}
-.tosa_higienica {background: linear-gradient(135deg, #C6A700, #FFD700);}
-.tosa_maquina {background: linear-gradient(135deg, #7B1FA2, #9C27B0);}
-.tosa_tesoura {background: linear-gradient(135deg, #FF5722, #FF7043);}
-.tratamentos {background: linear-gradient(135deg, #4CAF50, #81C784);}
+.card {padding: 15px; border-radius: 12px; margin: 5px; background: linear-gradient(135deg, #0B0F6D, #1B75BC); color: white; text-align: center; font-size: 14px;}
+.card h4 {margin-bottom: 8px; font-size: 16px;}
+.card p {margin: 2px; font-size: 14px;}
+.card .comissao {margin-top: 8px; font-weight: bold; font-size: 16px;}
+.stDataFrame th {background-color: #0B0F6D !important; color: white !important;}
+.stDataFrame td {text-align: center;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -40,7 +40,7 @@ with col2:
 uploaded_file = st.file_uploader("Envie a planilha CSV", type=["csv"])
 
 # =========================
-# CONFIGURAÇÃO DE METAS E PORCENTAGENS
+# Configuração de metas e porcentagens
 # =========================
 META_CONFIG = {
     "BANHO": {"base":3,"meta":4,"super":5,"bronze":150,"prata":180,"ouro":200},
@@ -50,9 +50,6 @@ META_CONFIG = {
     "TRATAMENTOS": {"base":15,"meta":20,"super":25,"bronze":40,"prata":55,"ouro":70},
 }
 
-# =========================
-# MAPA DE SERVIÇOS (nomes revisados)
-# =========================
 SERVICE_MAP = {
     "BANHO": ["Banho", "Banho + Hidratação", "Banho + Tosa Higiênica"],
     "TOSA HIGIENICA": ["Tosa Higiênica", "Tosa de Acabamento"],
@@ -77,8 +74,6 @@ if uploaded_file and funcionario and mes_referencia:
     try:
         df = pd.read_csv(uploaded_file, engine="python")
         df = df[df["SERVICO"].notna() & (df["SERVICO"].str.strip() != "")]
-
-        # Limpa e converte VALOR
         df["VALOR"] = (
             df["VALOR"].astype(str)
             .str.replace("R$", "", regex=False)
@@ -99,19 +94,23 @@ if uploaded_file and funcionario and mes_referencia:
             qtd = filtro.sum()
             faturamento = df.loc[filtro, "VALOR"].sum()
 
-            # Determina nome da meta atingida
+            # Determina nome da meta e porcentagem aplicada
             if qtd >= metas["ouro"]:
                 pct = metas["super"]/100
                 nome_meta = "Super Meta"
+                pct_text = f"{metas['super']}%"
             elif qtd >= metas["prata"]:
                 pct = metas["meta"]/100
                 nome_meta = "Meta"
+                pct_text = f"{metas['meta']}%"
             elif qtd >= metas["bronze"]:
                 pct = metas["base"]/100
                 nome_meta = "Base"
+                pct_text = f"{metas['base']}%"
             else:
                 pct = metas["base"]/100
                 nome_meta = "Base"
+                pct_text = f"{metas['base']}%"
 
             comissao = faturamento * pct
             total_comissao += comissao
@@ -121,7 +120,8 @@ if uploaded_file and funcionario and mes_referencia:
                 "Serviço": cat,
                 "Quantidade": qtd,
                 "Meta Alcançada": nome_meta,
-                "Comissão (R$)": comissao
+                "Porcentagem": pct_text,
+                "Comissão": comissao
             })
 
         # =========================
@@ -130,40 +130,42 @@ if uploaded_file and funcionario and mes_referencia:
         st.markdown(f"<div class='kpi'><h2>{funcionario}</h2><h4>{mes_referencia}</h4><h1>R$ {total_comissao:,.2f}</h1><p>Comissão Total</p></div>", unsafe_allow_html=True)
 
         # =========================
-        # Cards menores lado a lado com cores
+        # Cards lado a lado
         # =========================
         st.subheader("Resumo por Serviço")
         col1, col2, col3, col4, col5 = st.columns(5)
         card_columns = [col1, col2, col3, col4, col5]
-        color_classes = {
-            "BANHO": "banho",
-            "TOSA HIGIENICA": "tosa_higienica",
-            "TOSA MAQUINA": "tosa_maquina",
-            "TOSA TESOURA": "tosa_tesoura",
-            "TRATAMENTOS": "tratamentos"
-        }
 
         for i, item in enumerate(resultados):
             col = card_columns[i % 5]
-            color = color_classes[item["Serviço"]]
             col.markdown(
-                f"<div class='card {color}'><h4>{item['Serviço']}</h4><p>Qtd: {item['Quantidade']}<br>Meta: {item['Meta Alcançada']}</p></div>",
+                f"<div class='card'><h4>{item['Serviço']}</h4>"
+                f"<p>Qtd: {item['Quantidade']}<br>Meta: {item['Meta Alcançada']} ({item['Porcentagem']})</p>"
+                f"<p class='comissao'>R$ {item['Comissão']:.2f}</p></div>",
                 unsafe_allow_html=True
             )
 
         # =========================
-        # Comissões detalhadas ao final
-        # =========================
-        st.subheader("Comissões Aplicadas por Serviço")
-        for item in resultados:
-            st.write(f"{item['Serviço']}: R$ {item['Comissão (R$)']:.2f}")
-
-        # =========================
-        # Total
+        # Resumo Geral
         # =========================
         st.subheader("Resumo Geral")
         st.write(f"**Faturamento Total:** R$ {total_faturamento:,.2f}")
         st.write(f"**Comissão Total:** R$ {total_comissao:,.2f}")
+
+        # =========================
+        # Tabela de metas padrão
+        # =========================
+        st.subheader("Tabela de Metas Base")
+        metas_df = pd.DataFrame({
+            "Serviço": ["Banho", "Tosa Higiênica", "Tosa à Máquina", "Tosa à Tesoura", "Tratamentos"],
+            "Base (Qtd)": [META_CONFIG[s]["bronze"] for s in META_CONFIG],
+            "Base (%)": [f"{META_CONFIG[s]['base']}%" for s in META_CONFIG],
+            "Meta (Qtd)": [META_CONFIG[s]["prata"] for s in META_CONFIG],
+            "Meta (%)": [f"{META_CONFIG[s]['meta']}%" for s in META_CONFIG],
+            "Super Meta (Qtd)": [META_CONFIG[s]["ouro"] for s in META_CONFIG],
+            "Super Meta (%)": [f"{META_CONFIG[s]['super']}%" for s in META_CONFIG],
+        })
+        st.dataframe(metas_df, use_container_width=True)
 
     except Exception as e:
         st.error(f"Erro ao processar CSV: {e}")
