@@ -99,15 +99,19 @@ if uploaded_file and funcionario and mes_referencia:
             qtd = filtro.sum()
             faturamento = df.loc[filtro, "VALOR"].sum()
 
-            # Percentual aplicado conforme meta atingida
+            # Determina nome da meta atingida
             if qtd >= metas["ouro"]:
                 pct = metas["super"]/100
+                nome_meta = "Super Meta"
             elif qtd >= metas["prata"]:
                 pct = metas["meta"]/100
+                nome_meta = "Meta"
             elif qtd >= metas["bronze"]:
                 pct = metas["base"]/100
+                nome_meta = "Base"
             else:
                 pct = metas["base"]/100
+                nome_meta = "Base"
 
             comissao = faturamento * pct
             total_comissao += comissao
@@ -116,7 +120,7 @@ if uploaded_file and funcionario and mes_referencia:
             resultados.append({
                 "Serviço": cat,
                 "Quantidade": qtd,
-                "% Aplicada": f"{pct*100:.0f}%",
+                "Meta Alcançada": nome_meta,
                 "Comissão (R$)": comissao
             })
 
@@ -143,9 +147,16 @@ if uploaded_file and funcionario and mes_referencia:
             col = card_columns[i % 5]
             color = color_classes[item["Serviço"]]
             col.markdown(
-                f"<div class='card {color}'><h4>{item['Serviço']}</h4><p>Qtd: {item['Quantidade']}<br>%: {item['% Aplicada']}<br>R$ {item['Comissão (R$)']:.2f}</p></div>",
+                f"<div class='card {color}'><h4>{item['Serviço']}</h4><p>Qtd: {item['Quantidade']}<br>Meta: {item['Meta Alcançada']}</p></div>",
                 unsafe_allow_html=True
             )
+
+        # =========================
+        # Comissões detalhadas ao final
+        # =========================
+        st.subheader("Comissões Aplicadas por Serviço")
+        for item in resultados:
+            st.write(f"{item['Serviço']}: R$ {item['Comissão (R$)']:.2f}")
 
         # =========================
         # Total
