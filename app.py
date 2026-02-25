@@ -13,6 +13,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import pagesizes
 from reportlab.lib.units import inch
 
+# CONFIGURAÇÃO DA PÁGINA
 st.set_page_config(page_title="Performance Tosador – PET247", layout="wide")
 
 # CORES DA MARCA
@@ -50,19 +51,37 @@ def classificar(servico):
 
 if uploaded_file:
 
+    # LEITURA DO ARQUIVO
     if uploaded_file.name.endswith(".csv"):
         df = pd.read_csv(uploaded_file)
     else:
         df = pd.read_excel(uploaded_file)
 
+    # NORMALIZAÇÃO DAS COLUNAS
+    df.columns = df.columns.str.upper().str.strip()
+
+    if "SERVICO" not in df.columns or "VALOR" not in df.columns:
+        st.error("A planilha precisa conter as colunas SERVICO e VALOR.")
+        st.write("Colunas encontradas:", df.columns.tolist())
+        st.stop()
+
     df = df[["SERVICO", "VALOR"]].dropna()
+
+    # TRATAMENTO DO VALOR
+    df["VALOR"] = (
+        df["VALOR"]
+        .astype(str)
+        .str.replace(",", ".", regex=False)
+        .str.replace("-", "", regex=False)
+    )
+
     df["VALOR"] = pd.to_numeric(df["VALOR"], errors="coerce")
     df = df.dropna()
 
     registros = []
 
     for _, row in df.iterrows():
-        servicos = row["SERVICO"].split("+")
+        servicos = str(row["SERVICO"]).split("+")
         for s in servicos:
             registros.append({
                 "CATEGORIA": classificar(s.strip()),
@@ -71,6 +90,15 @@ if uploaded_file:
             })
 
     df_final = pd.DataFrame(registros)
+
+    # PROTEÇÃO CONTRA ERRO
+    if df_final.empty:
+        st.error("Nenhum serviço foi identificado. Verifique os nomes na coluna SERVICO.")
+        st.stop()
+
+    if "CATEGORIA" not in df_final.columns:
+        st.error("Erro interno: coluna CATEGORIA não foi criada.")
+        st.stop()
 
     resumo = df_final.groupby("CATEGORIA").agg(
         QUANTIDADE=("VALOR", "count"),
@@ -85,13 +113,15 @@ if uploaded_file:
         st.dataframe(df_final)
 
     # MINI GRÁFICO
+    st.subheader("Gráfico de Performance")
     fig = plt.figure()
     plt.bar(resumo["CATEGORIA"], resumo["QUANTIDADE"])
     plt.xticks(rotation=45)
     st.pyplot(fig)
 
-    # META
+    # ANÁLISE DE METAS
     st.subheader("Análise de Metas")
+
     for _, row in resumo.iterrows():
         categoria = row["CATEGORIA"]
         qtd = row["QUANTIDADE"]
@@ -111,8 +141,12 @@ if uploaded_file:
         elements = []
         styles = getSampleStyleSheet()
 
-        elements.append(Image("logo.png", width=3*inch, height=1*inch))
-        elements.append(Spacer(1, 0.3 * inch))
+        # LOGO
+        try:
+            elements.append(Image("logo.png", width=3*inch, height=1*inch))
+            elements.append(Spacer(1, 0.3 * inch))
+        except:
+            pass
 
         titulo_style = ParagraphStyle(
             'titulo',
@@ -147,8 +181,8 @@ if uploaded_file:
         elements.append(table)
         elements.append(Spacer(1, 0.3 * inch))
 
-        elements.append(Paragraph(f"Observações:", styles["Heading2"]))
-        elements.append(Paragraph(observacoes, styles["Normal"]))
+        elements.append(Paragraph("Observações:", styles["Heading2"]))
+        elements.append(Paragraph(observacoes if observacoes else "-", styles["Normal"]))
 
         doc.build(elements)
 
