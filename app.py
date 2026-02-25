@@ -1,293 +1,146 @@
 import streamlit as st
 import pandas as pd
-import tempfile
-import os
+from io import BytesIO
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
 from reportlab.lib import colors
-from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib import pagesizes
 from reportlab.lib.units import inch
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfbase import pdfmetrics
+from reportlab.platypus import HRFlowable
+from reportlab.lib.styles import getSampleStyleSheet
+from datetime import datetime
 
-st.set_page_config(page_title="Dashboard Performance – PET247", layout="wide")
-
-AZUL = "#0B0F6D"
-VERDE = "#17B3A3"
-logo_path = "logo.png"
-
-# =========================
-# ESTILO EXECUTIVO
-# =========================
-st.markdown("""
-<style>
-body { background-color: #f4f6f9; }
-
-.kpi {
-    background: linear-gradient(135deg, #0B0F6D, #17B3A3);
-    color: white;
-    padding: 30px;
-    border-radius: 20px;
-    text-align: center;
-    box-shadow: 0 10px 25px rgba(0,0,0,0.25);
-    margin-bottom: 30px;
-}
-
-.card {
-    background: white;
-    padding: 20px;
-    border-radius: 20px;
-    box-shadow: 0 8px 20px rgba(0,0,0,0.12);
-    margin-bottom: 25px;
-    transition: all 0.25s ease-in-out;
-}
-.card:hover { transform: translateY(-6px); }
-
-.card-title { font-size: 18px; font-weight: bold; margin-bottom: 8px; }
-
-.progress-bar {
-    height: 8px;
-    border-radius: 10px;
-    background-color: #ddd;
-    margin-top: 8px;
-}
-
-.progress-fill {
-    height: 8px;
-    border-radius: 10px;
-}
-
-.bronze { border-left: 8px solid #cd7f32; }
-.prata { border-left: 8px solid #C0C0C0; }
-.ouro { border-left: 8px solid #FFD700; }
-</style>
-""", unsafe_allow_html=True)
+st.set_page_config(layout="wide")
 
 # =========================
-# METAS
+# CONFIGURAÇÃO DE METAS
 # =========================
 META_CONFIG = {
-    "BANHO": {"base_qtd":129,"meta_qtd":130,"super_qtd":176,"pct":[0.03,0.04,0.05]},
-    "TOSA HIGIENICA": {"base_qtd":19,"meta_qtd":20,"super_qtd":40,"pct":[0.10,0.15,0.20]},
-    "TOSA MAQUINA": {"base_qtd":14,"meta_qtd":15,"super_qtd":30,"pct":[0.10,0.15,0.20]},
-    "TOSA TESOURA": {"base_qtd":14,"meta_qtd":15,"super_qtd":30,"pct":[0.15,0.20,0.25]},
-    "TRATAMENTOS": {"base_qtd":14,"meta_qtd":15,"super_qtd":30,"pct":[0.15,0.20,0.25]},
+    "BANHO": {"meta_qtd": 150, "super_qtd": 200, "base_pct": 0.05, "meta_pct": 0.07, "super_pct": 0.10},
+    "TOSA HIGIENICA": {"meta_qtd": 80, "super_qtd": 120, "base_pct": 0.05, "meta_pct": 0.07, "super_pct": 0.10},
+    "TOSA MAQUINA": {"meta_qtd": 60, "super_qtd": 100, "base_pct": 0.05, "meta_pct": 0.07, "super_pct": 0.10},
+    "TOSA TESOURA": {"meta_qtd": 40, "super_qtd": 70, "base_pct": 0.05, "meta_pct": 0.07, "super_pct": 0.10},
+    "TRATAMENTOS": {"meta_qtd": 40, "super_qtd": 70, "base_pct": 0.05, "meta_pct": 0.07, "super_pct": 0.10},
 }
 
 # =========================
-# HEADER
+# TÍTULO
 # =========================
-st.markdown("<div style='text-align:center;'>", unsafe_allow_html=True)
-if os.path.exists(logo_path):
-    st.image(logo_path, width=250)
-st.markdown(f"<h1 style='color:{AZUL};'>Dashboard Performance</h1>", unsafe_allow_html=True)
-st.markdown(f"<h3 style='color:{VERDE};'>PET247 Market</h3>", unsafe_allow_html=True)
-st.markdown("</div>", unsafe_allow_html=True)
-st.markdown("---")
+st.title("📊 Calculadora de Comissão")
 
-uploaded_file = st.file_uploader("Envie a planilha (.xlsx ou .csv)", type=["xlsx","csv"])
-nome = st.text_input("Nome do Profissional")
-mes = st.text_input("Mês de Referência")
-
-def classificar(servico):
-    s = servico.upper()
-    if "BANHO" in s: return "BANHO"
-    if "HIGIENICA" in s: return "TOSA HIGIENICA"
-    if "MAQUINA" in s: return "TOSA MAQUINA"
-    if "TESOURA" in s: return "TOSA TESOURA"
-    return "TRATAMENTOS"
+uploaded_file = st.file_uploader("Envie a planilha de vendas (.xlsx)", type=["xlsx"])
 
 if uploaded_file:
 
-    if uploaded_file.name.endswith(".csv"):
-        df = pd.read_csv(uploaded_file)
-    else:
-        df = pd.read_excel(uploaded_file)
+    df = pd.read_excel(uploaded_file)
 
-    df.columns = df.columns.str.upper().str.strip()
+    # =========================
+    # IDENTIFICAÇÕES AUTOMÁTICAS
+    # =========================
+    df["DATA"] = pd.to_datetime(df["DATA"])
+    data_inicio = df["DATA"].min().strftime("%d/%m/%Y")
+    data_fim = df["DATA"].max().strftime("%d/%m/%Y")
 
-    if "SERVICO" not in df.columns or "VALOR" not in df.columns:
-        st.error("A planilha precisa conter SERVICO e VALOR.")
-        st.stop()
+    funcionario = df["FUNCIONARIO"].iloc[0]
 
-    df = df[["SERVICO","VALOR"]].dropna()
-    df["VALOR"] = pd.to_numeric(df["VALOR"].astype(str).str.replace(",", "."), errors="coerce")
-    df = df.dropna()
+    # =========================
+    # TRATAMENTO SERVIÇOS
+    # =========================
+    df["SERVICO"] = df["SERVICO"].str.upper()
 
-    registros = []
+    resumo = []
 
-    for _, row in df.iterrows():
-        servicos = [s.strip().upper() for s in str(row["SERVICO"]).split("+")]
-        valor_total = row["VALOR"]
+    for categoria in META_CONFIG.keys():
+        filtro = df["SERVICO"].str.contains(categoria)
+        qtd = filtro.sum()
+        fat = df.loc[filtro, "VALOR"].sum()
 
-        # Serviço único mantém valor original
-        if len(servicos) == 1:
-            s = servicos[0]
-            registros.append({
-                "SERVICO": s,
-                "CATEGORIA": classificar(s),
-                "VALOR": valor_total
-            })
-
-        else:
-            valor_restante = valor_total
-
-            # Valores fixos quando compostos
-            for s in servicos:
-                if "HIGIENICA" in s:
-                    valor = 20
-                    valor_restante -= 20
-                    registros.append({
-                        "SERVICO": s,
-                        "CATEGORIA": classificar(s),
-                        "VALOR": valor
-                    })
-
-                elif "HIDRATACAO" in s:
-                    valor = 30
-                    valor_restante -= 30
-                    registros.append({
-                        "SERVICO": s,
-                        "CATEGORIA": classificar(s),
-                        "VALOR": valor
-                    })
-
-            # Serviço principal recebe restante
-            for s in servicos:
-                if "HIGIENICA" not in s and "HIDRATACAO" not in s:
-                    registros.append({
-                        "SERVICO": s,
-                        "CATEGORIA": classificar(s),
-                        "VALOR": valor_restante
-                    })
-
-    df_final = pd.DataFrame(registros)
-
-    resumo = df_final.groupby("CATEGORIA").agg(
-        QUANTIDADE=("VALOR","count"),
-        FATURAMENTO=("VALOR","sum")
-    ).reset_index()
-
-    total_comissao = 0
-    linhas_resumo = []
-
-    nomes_formatados = {
-        "BANHO": "Banho",
-        "TOSA HIGIENICA": "Tosa Higiênica",
-        "TOSA MAQUINA": "Tosa à Máquina",
-        "TOSA TESOURA": "Tosa à Tesoura",
-        "TRATAMENTOS": "Tratamentos"
-    }
-
-    for _, row in resumo.iterrows():
-        categoria = row["CATEGORIA"]
-        qtd = row["QUANTIDADE"]
-        fat = row["FATURAMENTO"]
         cfg = META_CONFIG[categoria]
 
         if qtd >= cfg["super_qtd"]:
-            pct = cfg["pct"][2]; faixa="SUPER META"
+            pct = cfg["super_pct"]
         elif qtd >= cfg["meta_qtd"]:
-            pct = cfg["pct"][1]; faixa="META"
+            pct = cfg["meta_pct"]
         else:
-            pct = cfg["pct"][0]; faixa="BASE"
+            pct = cfg["base_pct"]
 
         comissao = fat * pct
-        total_comissao += comissao
 
-        linhas_resumo.append([
-            nomes_formatados[categoria],
+        resumo.append([
+            categoria,
             qtd,
-            f"R$ {fat:,.2f}",
-            f"{pct*100:.0f}%",
-            f"R$ {comissao:,.2f}",
-            faixa
+            fat,
+            pct,
+            comissao
         ])
 
-    tabela_resumo = pd.DataFrame(linhas_resumo, columns=[
-        "Categoria","Quantidade","Faturamento",
-        "% Aplicada","Comissão","Faixa"
+    resumo_df = pd.DataFrame(resumo, columns=[
+        "Categoria",
+        "Quantidade",
+        "Faturamento",
+        "% Comissão",
+        "Comissão"
     ])
 
-    # KPI
-    st.markdown(f"""
-    <div class="kpi">
-        <h3>Comissão Total do Mês</h3>
-        <h1>R$ {total_comissao:,.2f}</h1>
-    </div>
-    """, unsafe_allow_html=True)
+    total_comissao = resumo_df["Comissão"].sum()
 
-    # Dashboard Cards
-    st.subheader("Performance por Categoria")
-
-    col1, col2 = st.columns(2)
-
-    for i, row in resumo.iterrows():
-        categoria = row["CATEGORIA"]
-        qtd = row["QUANTIDADE"]
-        fat = row["FATURAMENTO"]
-        cfg = META_CONFIG[categoria]
-
-        if qtd >= cfg["super_qtd"]:
-            pct = cfg["pct"][2]; classe="ouro"; medalha="🥇 Ouro"
-        elif qtd >= cfg["meta_qtd"]:
-            pct = cfg["pct"][1]; classe="prata"; medalha="🥈 Prata"
-        else:
-            pct = cfg["pct"][0]; classe="bronze"; medalha="🥉 Bronze"
-
-        comissao = fat * pct
-        progresso = min((qtd / cfg["super_qtd"]) * 100, 100)
-
-        card_html = f"""
-        <div class="card {classe}">
-            <div class="card-title">{nomes_formatados[categoria]} — {medalha}</div>
-            <div>Quantidade: <b>{qtd}</b></div>
-            <div>Faturamento: <b>R$ {fat:,.2f}</b></div>
-            <div>% Aplicada: <b>{pct*100:.0f}%</b></div>
-            <div>Comissão: <b>R$ {comissao:,.2f}</b></div>
-            <div class="progress-bar">
-                <div class="progress-fill" style="width:{progresso}%; background:#17B3A3;"></div>
-            </div>
-        </div>
-        """
-
-        if i % 2 == 0:
-            with col1:
-                st.markdown(card_html, unsafe_allow_html=True)
-        else:
-            with col2:
-                st.markdown(card_html, unsafe_allow_html=True)
-
+    # =========================
+    # DASHBOARD
+    # =========================
     st.subheader("Resumo Geral")
-    st.dataframe(tabela_resumo, use_container_width=True)
+    st.markdown(f"""
+    **Funcionário:** {funcionario}  
+    **Período:** {data_inicio} até {data_fim}  
+    **Comissão Total:** R$ {total_comissao:,.2f}
+    """)
 
-    # PDF
-    if st.button("Exportar PDF"):
-        temp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-        doc = SimpleDocTemplate(temp.name, pagesize=pagesizes.A4)
+    st.dataframe(resumo_df.style.format({
+        "Faturamento": "R$ {:,.2f}",
+        "% Comissão": "{:.0%}",
+        "Comissão": "R$ {:,.2f}"
+    }), use_container_width=True)
+
+    # =========================
+    # GERAR PDF
+    # =========================
+    if st.button("📄 Gerar Relatório PDF"):
+
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=pagesizes.A4)
         elements = []
+
         styles = getSampleStyleSheet()
 
-        if os.path.exists(logo_path):
-            elements.append(Image(logo_path, width=3*inch, height=1*inch))
-            elements.append(Spacer(1,12))
+        elements.append(Paragraph("<b>Relatório de Comissão</b>", styles["Title"]))
+        elements.append(Spacer(1, 12))
 
-        elements.append(Paragraph("Relatório de Performance", styles["Heading1"]))
-        elements.append(Spacer(1,12))
-        elements.append(Paragraph(f"Profissional: {nome}", styles["Normal"]))
-        elements.append(Paragraph(f"Mês: {mes}", styles["Normal"]))
-        elements.append(Spacer(1,12))
+        elements.append(Paragraph(f"Funcionário: {funcionario}", styles["Normal"]))
+        elements.append(Paragraph(f"Período: {data_inicio} até {data_fim}", styles["Normal"]))
+        elements.append(Paragraph(f"Comissão Total: R$ {total_comissao:,.2f}", styles["Normal"]))
 
-        tabela_pdf = Table([tabela_resumo.columns.tolist()] + tabela_resumo.values.tolist())
-        tabela_pdf.setStyle(TableStyle([
-            ('BACKGROUND',(0,0),(-1,0),colors.HexColor(AZUL)),
-            ('TEXTCOLOR',(0,0),(-1,0),colors.white),
-            ('GRID',(0,0),(-1,-1),0.5,colors.grey),
+        elements.append(Spacer(1, 20))
+        elements.append(HRFlowable(width="100%"))
+        elements.append(Spacer(1, 20))
+
+        tabela_dados = [resumo_df.columns.tolist()] + resumo_df.values.tolist()
+
+        tabela = Table(tabela_dados)
+        tabela.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
+            ("GRID", (0, 0), (-1, -1), 1, colors.black),
+            ("ALIGN", (2, 1), (-1, -1), "RIGHT")
         ]))
 
-        elements.append(tabela_pdf)
-        elements.append(Spacer(1,12))
-        elements.append(Paragraph(f"Comissão Total: R$ {total_comissao:,.2f}", styles["Heading2"]))
+        elements.append(tabela)
 
         doc.build(elements)
 
-        with open(temp.name,"rb") as f:
-            st.download_button("Baixar PDF", f, file_name="Relatorio_PET247.pdf")
+        st.download_button(
+            "⬇️ Baixar PDF",
+            buffer.getvalue(),
+            file_name="relatorio_comissao.pdf",
+            mime="application/pdf"
+        )
