@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import tempfile
+import os
 
 from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table,
@@ -12,24 +13,60 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib import pagesizes
 from reportlab.lib.units import inch
 
+# CONFIGURAÇÃO DA PÁGINA
 st.set_page_config(page_title="Dashboard Performance – PET247", layout="wide")
 
-# CORES DA MARCA
+# CORES INSTITUCIONAIS
 AZUL = "#0B0F6D"
 VERDE = "#17B3A3"
 
-st.markdown(f"<h1 style='color:{AZUL}'>🐾 Dashboard Performance - PET247</h1>", unsafe_allow_html=True)
+# HEADER COM LOGO
+logo_path = "logo.png"
+
+col_logo, col_titulo = st.columns([1,3])
+
+with col_logo:
+    if os.path.exists(logo_path):
+        st.image(logo_path, use_container_width=True)
+
+with col_titulo:
+    st.markdown(
+        f"<h1 style='color:{AZUL}; margin-bottom:0;'>Dashboard Performance</h1>",
+        unsafe_allow_html=True
+    )
+    st.markdown(
+        f"<h3 style='color:{VERDE}; margin-top:0;'>PET247 Market</h3>",
+        unsafe_allow_html=True
+    )
+
+st.markdown("---")
 
 uploaded_file = st.file_uploader("Envie a planilha (.xlsx ou .csv)", type=["xlsx", "csv"])
 nome_profissional = st.text_input("Nome do Profissional")
 mes_referencia = st.text_input("Mês de Referência")
 
+# CONFIG COMPLETA DE METAS + PERCENTUAIS
 META_CONFIG = {
-    "BANHO": 130,
-    "TOSA HIGIENICA": 20,
-    "TOSA MAQUINA": 15,
-    "TOSA TESOURA": 15,
-    "TRATAMENTOS": 15,
+    "BANHO": {
+        "base_qtd": 129, "meta_qtd": 130, "super_qtd": 176,
+        "base_pct": 0.03, "meta_pct": 0.04, "super_pct": 0.05
+    },
+    "TOSA HIGIENICA": {
+        "base_qtd": 19, "meta_qtd": 20, "super_qtd": 40,
+        "base_pct": 0.10, "meta_pct": 0.15, "super_pct": 0.20
+    },
+    "TOSA MAQUINA": {
+        "base_qtd": 14, "meta_qtd": 15, "super_qtd": 30,
+        "base_pct": 0.10, "meta_pct": 0.15, "super_pct": 0.20
+    },
+    "TOSA TESOURA": {
+        "base_qtd": 14, "meta_qtd": 15, "super_qtd": 30,
+        "base_pct": 0.15, "meta_pct": 0.20, "super_pct": 0.25
+    },
+    "TRATAMENTOS": {
+        "base_qtd": 14, "meta_qtd": 15, "super_qtd": 30,
+        "base_pct": 0.15, "meta_pct": 0.20, "super_pct": 0.25
+    },
 }
 
 def classificar(servico):
@@ -46,7 +83,7 @@ def classificar(servico):
 
 if uploaded_file:
 
-    # LEITURA
+    # LEITURA DO ARQUIVO
     if uploaded_file.name.endswith(".csv"):
         df = pd.read_csv(uploaded_file)
     else:
@@ -55,7 +92,7 @@ if uploaded_file:
     df.columns = df.columns.str.upper().str.strip()
 
     if "SERVICO" not in df.columns or "VALOR" not in df.columns:
-        st.error("A planilha precisa conter SERVICO e VALOR.")
+        st.error("A planilha precisa conter as colunas SERVICO e VALOR.")
         st.write("Colunas encontradas:", df.columns.tolist())
         st.stop()
 
@@ -88,52 +125,78 @@ if uploaded_file:
         st.error("Nenhum serviço identificado.")
         st.stop()
 
-    # RESUMO POR CATEGORIA
     resumo = df_final.groupby("CATEGORIA").agg(
         QUANTIDADE=("VALOR", "count"),
         FATURAMENTO=("VALOR", "sum")
     ).reset_index()
 
-    # RESUMO POR SERVIÇO INDIVIDUAL
     servicos_individuais = df_final.groupby("SERVICO").agg(
         QUANTIDADE=("VALOR", "count"),
         FATURAMENTO=("VALOR", "sum")
     ).reset_index()
 
-    # DASHBOARD EM COLUNAS
-    col1, col2 = st.columns([2,1])
+    st.subheader("📊 Performance e Comissão")
 
-    with col1:
-        st.subheader("Performance por Categoria")
+    total_comissao = 0
+    relatorio_melhoria = []
 
-        for _, row in resumo.iterrows():
-            categoria = row["CATEGORIA"]
-            qtd = row["QUANTIDADE"]
-            meta = META_CONFIG.get(categoria, 1)
+    for _, row in resumo.iterrows():
+        categoria = row["CATEGORIA"]
+        qtd = row["QUANTIDADE"]
+        faturamento = row["FATURAMENTO"]
 
-            progresso = min(qtd / meta, 1.0)
-            falta = max(meta - qtd, 0)
+        config = META_CONFIG[categoria]
 
-            st.markdown(f"### {categoria}")
-            st.progress(progresso)
+        if qtd >= config["super_qtd"]:
+            faixa = "SUPER META"
+            pct = config["super_pct"]
+            proxima_meta = None
+            indicador = "🟢"
+        elif qtd >= config["meta_qtd"]:
+            faixa = "META"
+            pct = config["meta_pct"]
+            proxima_meta = config["super_qtd"]
+            indicador = "🟡"
+        else:
+            faixa = "BASE"
+            pct = config["base_pct"]
+            proxima_meta = config["meta_qtd"]
+            indicador = "🔴"
 
-            if falta > 0:
-                st.markdown(f"🔴 Faltam **{falta} serviços** para atingir a meta.")
-            else:
-                st.markdown("🟢 Meta atingida.")
+        comissao = faturamento * pct
+        total_comissao += comissao
 
-            st.markdown(f"Total realizado: **{qtd}**")
-            st.markdown("---")
+        st.markdown(f"### {categoria}")
+        st.markdown(f"{indicador} Faixa: **{faixa}**")
+        st.markdown(f"Percentual aplicado: **{pct*100:.0f}%**")
+        st.markdown(f"Comissão gerada: **R$ {comissao:.2f}**")
 
-    with col2:
-        st.subheader("Gráfico Resumido")
+        progresso = min(qtd / config["super_qtd"], 1.0)
+        st.progress(progresso)
 
-        fig = plt.figure(figsize=(4,3))
-        plt.bar(resumo["CATEGORIA"], resumo["QUANTIDADE"])
-        plt.xticks(rotation=45)
-        st.pyplot(fig)
+        if proxima_meta:
+            falta = proxima_meta - qtd
+            st.markdown(f"Faltam **{falta} serviços** para atingir o próximo nível.")
+            relatorio_melhoria.append(
+                f"- {categoria}: aumentar {falta} serviços para subir de faixa."
+            )
+        else:
+            st.markdown("Nível máximo atingido.")
 
-    st.subheader("Serviços Discriminados Individualmente")
+        st.markdown("---")
+
+    st.subheader("💰 Comissão Total")
+    st.success(f"Total de comissão no mês: R$ {total_comissao:.2f}")
+
+    st.subheader("📈 Relatório de Melhoria")
+
+    if relatorio_melhoria:
+        for item in relatorio_melhoria:
+            st.markdown(item)
+    else:
+        st.success("Todas as categorias atingiram o nível máximo.")
+
+    st.subheader("📋 Serviços Discriminados Individualmente")
     st.dataframe(servicos_individuais, use_container_width=True)
 
     # EXPORTAR PDF
@@ -144,15 +207,12 @@ if uploaded_file:
         elements = []
         styles = getSampleStyleSheet()
 
-        try:
-            elements.append(Image("logo.png", width=3*inch, height=1*inch))
+        if os.path.exists(logo_path):
+            elements.append(Image(logo_path, width=3*inch, height=1*inch))
             elements.append(Spacer(1, 0.3 * inch))
-        except:
-            pass
 
         elements.append(Paragraph(f"Relatório de Performance - {mes_referencia}", styles["Heading1"]))
         elements.append(Spacer(1, 0.3 * inch))
-
         elements.append(Paragraph(f"Profissional: {nome_profissional}", styles["Normal"]))
         elements.append(Spacer(1, 0.3 * inch))
 
