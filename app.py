@@ -1,8 +1,19 @@
 import streamlit as st
 import pandas as pd
 import os
+import unicodedata
+from io import BytesIO
 
 st.set_page_config(layout="wide")
+
+# =========================
+# FUNÇÃO NORMALIZAÇÃO TEXTO
+# =========================
+def normalizar(texto):
+    texto = str(texto).upper()
+    texto = unicodedata.normalize('NFKD', texto)
+    texto = texto.encode('ASCII', 'ignore').decode('ASCII')
+    return texto
 
 # =========================
 # ESTILO PROFISSIONAL
@@ -17,24 +28,26 @@ body { background-color: #F4F6F9; }
     padding: 40px;
     border-radius: 18px;
     text-align: center;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.20);
     margin-bottom: 30px;
 }
 
-.meta-box {
-    background: #ffffff;
-    padding: 15px;
-    border-radius: 12px;
-    margin-bottom: 10px;
-    box-shadow: 0 5px 15px rgba(0,0,0,0.08);
-    font-size: 14px;
+.meta-card {
+    padding: 12px;
+    border-radius: 10px;
+    margin-bottom: 8px;
+    color: white;
+    font-size: 13px;
 }
+
+.bronze { background: linear-gradient(135deg, #8C6239, #B08D57); }
+.prata { background: linear-gradient(135deg, #8E9EAB, #BDC3C7); }
+.ouro { background: linear-gradient(135deg, #C6A700, #FFD700); }
 
 .progress-bar {
     height: 10px;
     background-color: #E6E6E6;
     border-radius: 6px;
-    margin-top: 5px;
+    margin-top: 4px;
 }
 
 .progress-fill {
@@ -45,17 +58,11 @@ body { background-color: #F4F6F9; }
 </style>
 """, unsafe_allow_html=True)
 
-# =========================
-# LOGO
-# =========================
 if os.path.exists("logo.png"):
-    st.image("logo.png", width=300)
+    st.image("logo.png", width=280)
 
 st.title("Relatório Oficial de Comissão")
 
-# =========================
-# CAMPOS
-# =========================
 col1, col2 = st.columns(2)
 with col1:
     funcionario = st.text_input("Nome do Funcionário")
@@ -65,22 +72,21 @@ with col2:
 st.divider()
 
 # =========================
-# CONFIG METAS E CATEGORIAS
+# METAS E PORCENTAGENS
 # =========================
-CATEGORIAS = {
-    "BANHO": ["BANHO"],
-    "TOSA HIGIENICA": ["HIGIENICA"],
-    "TOSA MAQUINA": ["MAQUINA"],
-    "TOSA TESOURA": ["TESOURA"],
-    "TRATAMENTOS": ["HIDRAT", "TRAT"]
+META_CONFIG = {
+    "BANHO": {"bronze":150,"prata":180,"ouro":200},
+    "TOSA HIGIENICA": {"bronze":80,"prata":100,"ouro":120},
+    "TOSA MAQUINA": {"bronze":60,"prata":80,"ouro":100},
+    "TOSA TESOURA": {"bronze":40,"prata":55,"ouro":70},
+    "TRATAMENTOS": {"bronze":40,"prata":55,"ouro":70},
 }
 
-META_CONFIG = {
-    "BANHO": 200,
-    "TOSA HIGIENICA": 120,
-    "TOSA MAQUINA": 100,
-    "TOSA TESOURA": 70,
-    "TRATAMENTOS": 70
+PERCENTUAIS = {
+    "INICIAL": 0.03,
+    "BRONZE": 0.05,
+    "PRATA": 0.07,
+    "OURO": 0.10
 }
 
 uploaded_file = st.file_uploader("Envie a planilha CSV extraida do Tecpet", type=["csv"])
@@ -90,89 +96,95 @@ if uploaded_file and funcionario and mes_referencia:
     try:
         df = pd.read_csv(uploaded_file, sep=None, engine="python")
 
-        # Limpeza segura
         df["VALOR"] = (
-            df["VALOR"]
-            .astype(str)
+            df["VALOR"].astype(str)
             .str.replace("R$", "", regex=False)
             .str.replace(".", "", regex=False)
             .str.replace(",", ".", regex=False)
             .str.strip()
         )
         df["VALOR"] = pd.to_numeric(df["VALOR"], errors="coerce").fillna(0)
-        df["SERVICO"] = df["SERVICO"].astype(str).str.upper()
 
-        resultados = []
+        df["SERVICO"] = df["SERVICO"].apply(normalizar)
+
         total_comissao = 0
         total_faturamento = 0
+        resultados = []
 
-        for categoria, palavras in CATEGORIAS.items():
+        for categoria, metas in META_CONFIG.items():
 
-            filtro = df["SERVICO"].apply(
-                lambda x: any(p in x for p in palavras)
-            )
+            cat_norm = normalizar(categoria)
+
+            if categoria == "TRATAMENTOS":
+                filtro = df["SERVICO"].str.contains("HIDRAT|TRAT", regex=True)
+            else:
+                filtro = df["SERVICO"].str.contains(cat_norm, regex=False)
 
             qtd = filtro.sum()
             faturamento = df.loc[filtro, "VALOR"].sum()
 
-            # comissão fixa exemplo 5%
-            pct = 0.05
+            # Define nível
+            if qtd >= metas["ouro"]:
+                nivel = "OURO"
+            elif qtd >= metas["prata"]:
+                nivel = "PRATA"
+            elif qtd >= metas["bronze"]:
+                nivel = "BRONZE"
+            else:
+                nivel = "INICIAL"
+
+            pct = PERCENTUAIS[nivel]
             comissao = faturamento * pct
 
             total_comissao += comissao
             total_faturamento += faturamento
 
-            progresso = min((qtd / META_CONFIG[categoria]) * 100, 100)
+            progresso = min((qtd / metas["ouro"]) * 100, 100)
 
             resultados.append({
                 "Categoria": categoria,
                 "Quantidade": qtd,
                 "Faturamento": faturamento,
+                "Nível": nivel,
+                "% Aplicado": f"{pct*100:.0f}%",
                 "Comissão": comissao,
-                "Meta": META_CONFIG[categoria],
                 "Progresso": progresso
             })
 
-        # =========================
-        # KPI CENTRAL
-        # =========================
+        # KPI
         st.markdown(f"""
         <div class="kpi">
             <h2>{funcionario}</h2>
             <h4>{mes_referencia}</h4>
             <h1>R$ {total_comissao:,.2f}</h1>
-            <p>Total de Comissão</p>
+            <p>Comissão Total</p>
         </div>
         """, unsafe_allow_html=True)
 
-        # =========================
-        # LAYOUT PRINCIPAL
-        # =========================
-        col_meta, col_relatorio = st.columns([0.2, 0.8])
+        col_meta, col_rel = st.columns([0.2, 0.8])
 
         # =========================
-        # METAS (20%)
+        # METAS AGRUPADAS
         # =========================
         with col_meta:
             st.subheader("Metas")
 
-            for categoria in META_CONFIG:
-                st.markdown(f"""
-                <div class="meta-box">
-                    <b>{categoria}</b><br>
-                    Meta Ouro: {META_CONFIG[categoria]} serviços
-                </div>
-                """, unsafe_allow_html=True)
+            for cat, metas in META_CONFIG.items():
+                st.markdown(f"**{cat}**")
+
+                st.markdown(f'<div class="meta-card bronze">🥉 Bronze: {metas["bronze"]} → 5%</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="meta-card prata">🥈 Prata: {metas["prata"]} → 7%</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="meta-card ouro">🥇 Ouro: {metas["ouro"]} → 10%</div>', unsafe_allow_html=True)
+
+                st.markdown("---")
 
         # =========================
-        # RELATÓRIO GERAL
+        # RELATÓRIO COMPLETO
         # =========================
-        with col_relatorio:
-            st.subheader("Relatório Geral de Serviços")
+        with col_rel:
+            st.subheader("Relatório Geral de Comissionamento")
 
-            relatorio_df = pd.DataFrame(resultados)[
-                ["Categoria", "Quantidade", "Faturamento", "Comissão"]
-            ]
+            relatorio_df = pd.DataFrame(resultados)
 
             st.dataframe(relatorio_df, use_container_width=True)
 
@@ -184,7 +196,7 @@ if uploaded_file and funcionario and mes_referencia:
         st.divider()
 
         # =========================
-        # DASHBOARD DE PROGRESSÃO
+        # DASHBOARD PROGRESSÃO
         # =========================
         st.subheader("Progressão das Metas")
 
@@ -194,8 +206,22 @@ if uploaded_file and funcionario and mes_referencia:
             <div class="progress-bar">
                 <div class="progress-fill" style="width:{item['Progresso']}%;"></div>
             </div>
-            <small>{item['Progresso']:.1f}% da Meta</small>
+            <small>{item['Progresso']:.1f}% da meta Ouro</small>
             """, unsafe_allow_html=True)
+
+        # =========================
+        # DOWNLOAD RELATÓRIO
+        # =========================
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            relatorio_df.to_excel(writer, index=False, sheet_name='Comissao')
+
+        st.download_button(
+            label="Baixar Relatório em Excel",
+            data=output.getvalue(),
+            file_name=f"Relatorio_Comissao_{funcionario}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 
     except Exception as e:
         st.error(f"Erro ao processar CSV: {e}")
