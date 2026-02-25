@@ -17,6 +17,43 @@ def normalizar(texto):
     return texto
 
 # =========================
+# ESTILO MODERNO DO APP
+# =========================
+st.markdown("""
+<style>
+body { background-color: #F4F6F9; font-family: 'Arial', sans-serif; }
+
+.kpi {
+    background: linear-gradient(135deg, #0B0F6D, #1B75BC);
+    color: white;
+    padding: 30px;
+    border-radius: 20px;
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+.table-container {
+    background-color: white;
+    padding: 20px;
+    border-radius: 15px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+h2, h3 {
+    color: #0B0F6D;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# =========================
+# LOGO E TÍTULO
+# =========================
+if os.path.exists("logo.png"):
+    st.image("logo.png", width=250)
+
+st.title("Relatório de Comissão - Pet24🕒7")
+
+# =========================
 # INPUTS
 # =========================
 col1, col2 = st.columns(2)
@@ -33,7 +70,6 @@ uploaded_file = st.file_uploader("Envie a planilha CSV extraída do Tecpet", typ
 if uploaded_file and funcionario and mes_referencia:
     try:
         df = pd.read_csv(uploaded_file, sep=None, engine="python")
-        # remover linhas com serviço vazio
         df = df[df["SERVICO"].notna() & (df["SERVICO"].str.strip() != "")]
         df["VALOR"] = (
             df["VALOR"].astype(str)
@@ -45,12 +81,15 @@ if uploaded_file and funcionario and mes_referencia:
         df["VALOR"] = pd.to_numeric(df["VALOR"], errors="coerce").fillna(0)
         df["SERVICO"] = df["SERVICO"].apply(normalizar)
 
+        # =========================
+        # METAS COM PERCENTUAL POR NÍVEL
+        # =========================
         META_CONFIG = {
-            "BANHO": {"bronze":150,"prata":180,"ouro":200,"percent":0.05},
-            "TOSA HIGIENICA": {"bronze":80,"prata":100,"ouro":120,"percent":0.07},
-            "TOSA MAQUINA": {"bronze":60,"prata":80,"ouro":100,"percent":0.07},
-            "TOSA TESOURA": {"bronze":40,"prata":55,"ouro":70,"percent":0.10},
-            "TRATAMENTOS": {"bronze":40,"prata":55,"ouro":70,"percent":0.10},
+            "BANHO": {"bronze":150,"prata":180,"ouro":200,"percent_bronze":0.05,"percent_prata":0.07,"percent_ouro":0.10},
+            "TOSA HIGIENICA": {"bronze":80,"prata":100,"ouro":120,"percent_bronze":0.05,"percent_prata":0.07,"percent_ouro":0.10},
+            "TOSA MAQUINA": {"bronze":60,"prata":80,"ouro":100,"percent_bronze":0.05,"percent_prata":0.07,"percent_ouro":0.10},
+            "TOSA TESOURA": {"bronze":40,"prata":55,"ouro":70,"percent_bronze":0.05,"percent_prata":0.07,"percent_ouro":0.10},
+            "TRATAMENTOS": {"bronze":40,"prata":55,"ouro":70,"percent_bronze":0.05,"percent_prata":0.07,"percent_ouro":0.10},
         }
 
         resultados = []
@@ -67,15 +106,19 @@ if uploaded_file and funcionario and mes_referencia:
             qtd = filtro.sum()
             faturamento = df.loc[filtro, "VALOR"].sum()
 
-            # definir % aplicada
+            # Determinar % aplicada
             if qtd >= metas["ouro"]:
-                pct = metas["percent"]
+                pct = metas["percent_ouro"]
+                faltam_proxima = 0
             elif qtd >= metas["prata"]:
-                pct = metas["percent"]
+                pct = metas["percent_prata"]
+                faltam_proxima = metas["ouro"] - qtd
             elif qtd >= metas["bronze"]:
-                pct = metas["percent"]
+                pct = metas["percent_bronze"]
+                faltam_proxima = metas["prata"] - qtd
             else:
                 pct = 0.03
+                faltam_proxima = metas["bronze"] - qtd
 
             comissao = faturamento * pct
             total_comissao += comissao
@@ -86,15 +129,33 @@ if uploaded_file and funcionario and mes_referencia:
                 "Quantidade": qtd,
                 "Meta Ouro": metas["ouro"],
                 "% Aplicada": f"{pct*100:.0f}%",
-                "Comissão": comissao
+                "Comissão": comissao,
+                "Faltam para próxima meta": max(faltam_proxima,0)
             })
+
+        # =========================
+        # KPI
+        # =========================
+        st.markdown(f"""
+        <div class="kpi">
+            <h2>{funcionario}</h2>
+            <h4>{mes_referencia}</h4>
+            <h1>R$ {total_comissao:,.2f}</h1>
+            <p>Comissão Total</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # =========================
+        # TABELA DE RESULTADOS
+        # =========================
+        st.subheader("Resumo por Serviço")
+        st.dataframe(pd.DataFrame(resultados), use_container_width=True)
 
         # =========================
         # GERAR PDF
         # =========================
         class PDF(FPDF):
             def header(self):
-                # salvar logo temporário
                 if os.path.exists("logo.png"):
                     temp_logo = "logo_temp.png"
                     with open(temp_logo, "wb") as f:
@@ -110,12 +171,12 @@ if uploaded_file and funcionario and mes_referencia:
         pdf.add_page()
         pdf.set_font("Arial", '', 12)
 
-        # tabela de serviços
         pdf.cell(50, 10, "Serviço", 1)
         pdf.cell(30, 10, "Qtd", 1)
         pdf.cell(30, 10, "Meta Ouro", 1)
         pdf.cell(30, 10, "% Aplicada", 1)
         pdf.cell(40, 10, "Comissão (R$)", 1)
+        pdf.cell(40, 10, "Faltam p/ Próx. Meta", 1)
         pdf.ln()
 
         for item in resultados:
@@ -124,6 +185,7 @@ if uploaded_file and funcionario and mes_referencia:
             pdf.cell(30, 10, str(item["Meta Ouro"]), 1)
             pdf.cell(30, 10, item["% Aplicada"], 1)
             pdf.cell(40, 10, f'{item["Comissão"]:.2f}', 1)
+            pdf.cell(40, 10, str(item["Faltam para próxima meta"]), 1)
             pdf.ln()
 
         pdf.ln(5)
@@ -134,9 +196,6 @@ if uploaded_file and funcionario and mes_referencia:
         output = BytesIO()
         pdf.output(output)
 
-        # =========================
-        # BOTÕES DE DOWNLOAD E VISUALIZAÇÃO
-        # =========================
         st.download_button(
             label="📥 Baixar Relatório em PDF",
             data=output.getvalue(),
