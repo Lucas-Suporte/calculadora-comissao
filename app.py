@@ -1,52 +1,46 @@
 import streamlit as st
 import pandas as pd
 from io import BytesIO
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-from reportlab.lib import colors
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib import pagesizes
-from reportlab.platypus import HRFlowable
 import os
 
 st.set_page_config(layout="wide")
 
-# ================================
-# ESTILO VISUAL
-# ================================
+# =========================
+# ESTILO CORPORATIVO PREMIUM
+# =========================
 st.markdown("""
 <style>
 .logo-center {
     display: flex;
     justify-content: center;
-    margin-top: 10px;
+    margin-top: 15px;
     margin-bottom: 10px;
 }
 .title-center {
     text-align: center;
-    font-size: 36px;
-    font-weight: bold;
+    font-size: 34px;
+    font-weight: 600;
     margin-bottom: 30px;
 }
 .kpi {
     background: linear-gradient(135deg, #0B0F6D, #17B3A3);
     color: white;
-    padding: 40px;
-    border-radius: 22px;
+    padding: 45px;
+    border-radius: 24px;
     text-align: center;
-    box-shadow: 0 14px 35px rgba(0,0,0,0.25);
-    margin-bottom: 30px;
+    box-shadow: 0 18px 40px rgba(0,0,0,0.25);
+    margin-bottom: 35px;
 }
-.card3d {
-    background: linear-gradient(145deg, #ffffff, #e6e6e6);
-    padding: 20px;
-    border-radius: 20px;
-    box-shadow: 8px 8px 20px rgba(0,0,0,0.15),
-                -8px -8px 20px rgba(255,255,255,0.7);
-    margin-bottom: 20px;
+.card-premium {
+    background: #ffffff;
+    padding: 22px;
+    border-radius: 18px;
+    box-shadow: 0 8px 25px rgba(0,0,0,0.12);
+    margin-bottom: 22px;
 }
 .progress-bar {
     height: 10px;
-    background-color: #ddd;
+    background-color: #E6E6E6;
     border-radius: 10px;
     margin-top: 8px;
 }
@@ -55,22 +49,28 @@ st.markdown("""
     border-radius: 10px;
     background: linear-gradient(90deg, #17B3A3, #0B0F6D);
 }
+.meta-table {
+    background: #ffffff;
+    padding: 25px;
+    border-radius: 18px;
+    box-shadow: 0 8px 25px rgba(0,0,0,0.10);
+}
 </style>
 """, unsafe_allow_html=True)
 
-# ================================
-# LOGO CENTRALIZADA
-# ================================
+# =========================
+# LOGO
+# =========================
 if os.path.exists("logo.png"):
     st.markdown('<div class="logo-center">', unsafe_allow_html=True)
-    st.image("logo.png", width=350)
+    st.image("logo.png", width=340)
     st.markdown('</div>', unsafe_allow_html=True)
 
-st.markdown('<div class="title-center">📊 Calculadora de Comissão</div>', unsafe_allow_html=True)
+st.markdown('<div class="title-center">Calculadora Corporativa de Comissão</div>', unsafe_allow_html=True)
 
-# ================================
-# CAMPOS MANUAIS
-# ================================
+# =========================
+# CAMPOS
+# =========================
 col1, col2 = st.columns(2)
 
 with col1:
@@ -81,9 +81,9 @@ with col2:
 
 st.divider()
 
-# ================================
+# =========================
 # CONFIG METAS
-# ================================
+# =========================
 META_CONFIG = {
     "BANHO": {"meta_qtd": 150, "super_qtd": 200, "base_pct": 0.05, "meta_pct": 0.07, "super_pct": 0.10},
     "TOSA HIGIENICA": {"meta_qtd": 80, "super_qtd": 120, "base_pct": 0.05, "meta_pct": 0.07, "super_pct": 0.10},
@@ -92,40 +92,48 @@ META_CONFIG = {
     "TRATAMENTOS": {"meta_qtd": 40, "super_qtd": 70, "base_pct": 0.05, "meta_pct": 0.07, "super_pct": 0.10},
 }
 
-uploaded_file = st.file_uploader("Envie a planilha CSV no padrão servicos_25_02", type=["csv"])
+uploaded_file = st.file_uploader("Envie a planilha CSV extraida do Tecpet", type=["csv"])
 
 if uploaded_file and funcionario and mes_referencia:
 
     try:
         df = pd.read_csv(uploaded_file, sep=None, engine="python")
 
-        # Garantir colunas corretas
         if "SERVICO" not in df.columns or "VALOR" not in df.columns:
-            st.error("CSV fora do padrão esperado (SERVICO / VALOR).")
+            st.error("CSV fora do padrão Tecpet.")
             st.stop()
 
+        # Conversão segura de VALOR
+        df["VALOR"] = (
+            df["VALOR"]
+            .astype(str)
+            .str.replace("R$", "", regex=False)
+            .str.replace(".", "", regex=False)
+            .str.replace(",", ".", regex=False)
+            .str.strip()
+        )
+
+        df["VALOR"] = pd.to_numeric(df["VALOR"], errors="coerce").fillna(0)
         df["SERVICO"] = df["SERVICO"].astype(str).str.upper()
 
         resumo = []
         total_comissao = 0
 
-        for categoria in META_CONFIG.keys():
+        for categoria, cfg in META_CONFIG.items():
 
             filtro = df["SERVICO"].str.contains(categoria)
             qtd = filtro.sum()
             fat = df.loc[filtro, "VALOR"].sum()
 
-            cfg = META_CONFIG[categoria]
-
             if qtd >= cfg["super_qtd"]:
                 pct = cfg["super_pct"]
-                nivel = "SUPER META"
+                proxima_meta = 0
             elif qtd >= cfg["meta_qtd"]:
                 pct = cfg["meta_pct"]
-                nivel = "META"
+                proxima_meta = cfg["super_qtd"] - qtd
             else:
                 pct = cfg["base_pct"]
-                nivel = "BASE"
+                proxima_meta = cfg["meta_qtd"] - qtd
 
             comissao = fat * pct
             total_comissao += comissao
@@ -137,11 +145,13 @@ if uploaded_file and funcionario and mes_referencia:
                 "fat": fat,
                 "pct": pct,
                 "comissao": comissao,
-                "nivel": nivel,
-                "progresso": progresso
+                "progresso": progresso,
+                "faltam": proxima_meta
             })
 
-        # KPI PRINCIPAL
+        # =========================
+        # KPI CENTRAL
+        # =========================
         st.markdown(f"""
         <div class="kpi">
             <h2>{funcionario}</h2>
@@ -150,42 +160,62 @@ if uploaded_file and funcionario and mes_referencia:
         </div>
         """, unsafe_allow_html=True)
 
-        col_left, col_right = st.columns([1, 1.4])
+        col_left, col_right = st.columns([1, 1.6])
 
-        # INDICADORES
+        # =========================
+        # LADO ESQUERDO — TABELA BASE DE METAS
+        # =========================
         with col_left:
-            st.subheader("Indicadores de Comissão")
+            st.markdown('<div class="meta-table">', unsafe_allow_html=True)
+            st.subheader("Tabela Base de Metas")
+
+            base_df = pd.DataFrame([
+                [
+                    cat,
+                    cfg["meta_qtd"],
+                    cfg["super_qtd"],
+                    f"{cfg['base_pct']*100:.0f}%",
+                    f"{cfg['meta_pct']*100:.0f}%",
+                    f"{cfg['super_pct']*100:.0f}%"
+                ]
+                for cat, cfg in META_CONFIG.items()
+            ], columns=[
+                "Categoria",
+                "Meta",
+                "Super Meta",
+                "% Base",
+                "% Meta",
+                "% Super"
+            ])
+
+            st.dataframe(base_df, use_container_width=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+
+        # =========================
+        # LADO DIREITO — INDICADORES PREMIUM
+        # =========================
+        with col_right:
+            st.subheader("Indicadores de Performance")
 
             for item in resumo:
+                faltam_texto = (
+                    f"Faltam {item['faltam']} serviços para próxima meta"
+                    if item["faltam"] > 0
+                    else "Meta Máxima Atingida"
+                )
+
                 st.markdown(f"""
-                <div class="card3d">
+                <div class="card-premium">
                     <b>{item['categoria']}</b><br>
-                    {item['pct']*100:.0f}% aplicada<br>
-                    Comissão: <b>R$ {item['comissao']:,.2f}</b>
+                    Comissão Aplicada: {item['pct']*100:.0f}%<br>
+                    Comissão: <b>R$ {item['comissao']:,.2f}</b><br>
+                    {faltam_texto}
 
                     <div class="progress-bar">
                         <div class="progress-fill" style="width:{item['progresso']}%;"></div>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
-
-        # TABELA
-        with col_right:
-            st.subheader("Resumo Financeiro")
-
-            tabela_df = pd.DataFrame([
-                [
-                    i["categoria"],
-                    i["qtd"],
-                    f"R$ {i['fat']:,.2f}",
-                    f"{i['pct']*100:.0f}%",
-                    f"R$ {i['comissao']:,.2f}",
-                    i["nivel"]
-                ]
-                for i in resumo
-            ], columns=["Categoria", "Qtd", "Faturamento", "% Comissão", "Comissão", "Nível"])
-
-            st.dataframe(tabela_df, use_container_width=True)
 
     except Exception as e:
         st.error(f"Erro ao processar CSV: {e}")
