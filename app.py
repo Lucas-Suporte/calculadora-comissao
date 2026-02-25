@@ -5,28 +5,83 @@ import os
 st.set_page_config(layout="wide")
 
 # =========================
-# CSS moderno para cards e tabela
+# CSS moderno
 # =========================
 st.markdown("""
 <style>
 body { background-color: #F4F6F9; font-family: 'Arial', sans-serif; }
-.kpi {background: linear-gradient(135deg, #0B0F6D, #1B75BC); color: white; padding: 30px; border-radius: 20px; text-align: center; margin-bottom: 30px;}
-.card {padding: 15px; border-radius: 12px; margin: 5px; background: linear-gradient(135deg, #0B0F6D, #1B75BC); color: white; text-align: center; font-size: 14px;}
+
+/* KPI */
+.kpi {
+    background: linear-gradient(135deg, #0B0F6D, #1B75BC);
+    color: white;
+    padding: 30px;
+    border-radius: 20px;
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+/* Cards */
+.card {
+    padding: 15px;
+    border-radius: 12px;
+    margin: 5px;
+    background: linear-gradient(135deg, #0B0F6D, #1B75BC);
+    color: white;
+    text-align: center;
+    font-size: 14px;
+}
 .card h4 {margin-bottom: 8px; font-size: 16px;}
 .card p {margin: 2px; font-size: 14px;}
 .card .comissao {margin-top: 8px; font-weight: bold; font-size: 16px;}
-.stDataFrame th {background-color: #0B0F6D !important; color: white !important;}
-.stDataFrame td {text-align: center;}
+
+/* Inputs destacados */
+input[type="text"] {
+    border: 2px solid #0B0F6D !important;
+    border-radius: 8px;
+    padding: 8px;
+    font-size: 16px;
+}
+
+/* File Uploader estilizado */
+div.stFileUploader>div>div>button {
+    background-color: #0B0F6D;
+    color: white;
+    border-radius: 8px;
+    padding: 8px 20px;
+    font-weight: bold;
+    font-size: 14px;
+}
+div.stFileUploader>div>div>button:hover {
+    background-color: #1B75BC;
+}
+
+/* Tabela */
+.stDataFrame th {
+    background-color: #0B0F6D !important;
+    color: white !important;
+    text-align: center;
+}
+.stDataFrame td {
+    text-align: center;
+}
 </style>
 """, unsafe_allow_html=True)
 
 # =========================
-# Logo
+# Logo e título centralizados
 # =========================
 if os.path.exists("logo.png"):
-    st.image("logo.png", width=250)
+    st.markdown(
+        f"""
+        <div style='text-align:center; margin-bottom:20px;'>
+            <img src='logo.png' width='500'>
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
 
-st.title("Relatório de Comissão - Pet24🕒7")
+st.markdown("<h1 style='text-align:center;'>Relatório de Comissão - Pet24🕒7</h1>", unsafe_allow_html=True)
 
 # =========================
 # Inputs
@@ -94,7 +149,6 @@ if uploaded_file and funcionario and mes_referencia:
             qtd = filtro.sum()
             faturamento = df.loc[filtro, "VALOR"].sum()
 
-            # Determina nome da meta e porcentagem aplicada
             if qtd >= metas["ouro"]:
                 pct = metas["super"]/100
                 nome_meta = "Super Meta"
