@@ -1,15 +1,10 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
 import tempfile
 import os
-
-from reportlab.platypus import (
-    SimpleDocTemplate, Paragraph, Spacer, Table,
-    TableStyle, Image
-)
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
 from reportlab.lib import colors
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib import pagesizes
 from reportlab.lib.units import inch
 
@@ -17,9 +12,42 @@ st.set_page_config(page_title="Dashboard Performance – PET247", layout="wide")
 
 AZUL = "#0B0F6D"
 VERDE = "#17B3A3"
-
-# ===== HEADER CENTRALIZADO =====
 logo_path = "logo.png"
+
+# =========================
+# BASE FIXA DE VALORES
+# =========================
+
+VALORES = {
+    1: {"BANHO":65,"TOSA HIGIENICA":100,"TOSA MAQUINA":130,"TOSA TESOURA":150,"REMOCAO SUBPELO":105},
+    2: {"BANHO":75,"TOSA HIGIENICA":110,"TOSA MAQUINA":140,"TOSA TESOURA":160},
+    3: {"BANHO":90,"TOSA HIGIENICA":125,"TOSA MAQUINA":155,"TOSA TESOURA":175,"REMOCAO SUBPELO":135},
+    4: {"BANHO":135,"TOSA HIGIENICA":175,"TOSA MAQUINA":200,"TOSA TESOURA":220},
+    5: {"BANHO":180,"TOSA HIGIENICA":225,"TOSA MAQUINA":245,"TOSA TESOURA":300},
+}
+
+TRATAMENTOS_VALORES = {
+    "HIDRATACAO":35,
+    "HIGIENE BUCAL":25,
+    "CORTE DE UNHAS":25,
+    "REMOCAO SUBPELO":105
+}
+
+# =========================
+# METAS
+# =========================
+
+META_CONFIG = {
+    "BANHO":{"base":129,"meta":130,"super":176,"pct":[0.03,0.04,0.05]},
+    "TOSA HIGIENICA":{"base":19,"meta":20,"super":40,"pct":[0.10,0.15,0.20]},
+    "TOSA MAQUINA":{"base":14,"meta":15,"super":30,"pct":[0.10,0.15,0.20]},
+    "TOSA TESOURA":{"base":14,"meta":15,"super":30,"pct":[0.15,0.20,0.25]},
+    "TRATAMENTOS":{"base":14,"meta":15,"super":30,"pct":[0.15,0.20,0.25]},
+}
+
+# =========================
+# HEADER
+# =========================
 
 st.markdown("<div style='text-align:center;'>", unsafe_allow_html=True)
 if os.path.exists(logo_path):
@@ -29,34 +57,11 @@ st.markdown(f"<h3 style='color:{VERDE};'>PET247 Market</h3>", unsafe_allow_html=
 st.markdown("</div>", unsafe_allow_html=True)
 st.markdown("---")
 
-# ===== CONFIGURAÇÃO DE METAS =====
-META_CONFIG = {
-    "BANHO": {"base_qtd":129,"meta_qtd":130,"super_qtd":176,"base_pct":0.03,"meta_pct":0.04,"super_pct":0.05},
-    "TOSA HIGIENICA": {"base_qtd":19,"meta_qtd":20,"super_qtd":40,"base_pct":0.10,"meta_pct":0.15,"super_pct":0.20},
-    "TOSA MAQUINA": {"base_qtd":14,"meta_qtd":15,"super_qtd":30,"base_pct":0.10,"meta_pct":0.15,"super_pct":0.20},
-    "TOSA TESOURA": {"base_qtd":14,"meta_qtd":15,"super_qtd":30,"base_pct":0.15,"meta_pct":0.20,"super_pct":0.25},
-    "TRATAMENTOS": {"base_qtd":14,"meta_qtd":15,"super_qtd":30,"base_pct":0.15,"meta_pct":0.20,"super_pct":0.25},
-}
+grupo = st.selectbox("Grupo do Pet (1 a 5)", [1,2,3,4,5])
 
-# ===== TABELA INFORMATIVA DE METAS =====
-st.subheader("Metas de Premiação")
-metas_df = pd.DataFrame([
-    [k,v["base_qtd"],v["meta_qtd"],v["super_qtd"],f'{v["base_pct"]*100:.0f}%',f'{v["meta_pct"]*100:.0f}%',f'{v["super_pct"]*100:.0f}%']
-    for k,v in META_CONFIG.items()
-], columns=["Serviço","Base","Meta","Super Meta","% Base","% Meta","% Super"])
-
-st.dataframe(metas_df, use_container_width=True)
-
-st.markdown("---")
-
-uploaded_file = st.file_uploader("Envie a planilha (.xlsx ou .csv)", type=["xlsx", "csv"])
-nome_profissional = st.text_input("Nome do Profissional")
-mes_referencia = st.text_input("Mês de Referência")
-
-layout_opcao = st.radio(
-    "Visualização do Layout:",
-    ["Completo", "Somente Dashboard", "Somente Tabela"]
-)
+uploaded_file = st.file_uploader("Envie a planilha (.xlsx ou .csv)", type=["xlsx","csv"])
+nome = st.text_input("Nome do Profissional")
+mes = st.text_input("Mês de Referência")
 
 def classificar(servico):
     s = servico.upper()
@@ -74,22 +79,25 @@ if uploaded_file:
         df = pd.read_excel(uploaded_file)
 
     df.columns = df.columns.str.upper().str.strip()
-
-    if "SERVICO" not in df.columns or "VALOR" not in df.columns:
-        st.error("A planilha precisa conter SERVICO e VALOR.")
-        st.stop()
-
-    df = df[["SERVICO", "VALOR"]].dropna()
-    df["VALOR"] = pd.to_numeric(df["VALOR"].astype(str).str.replace(",", "."), errors="coerce")
-    df = df.dropna()
+    df = df[["SERVICO"]].dropna()
 
     registros = []
+
     for _, row in df.iterrows():
-        for s in str(row["SERVICO"]).split("+"):
+        servicos = [s.strip().upper() for s in row["SERVICO"].split("+")]
+
+        for s in servicos:
+            categoria = classificar(s)
+
+            if categoria == "TRATAMENTOS":
+                valor = TRATAMENTOS_VALORES.get(s,0)
+            else:
+                valor = VALORES[grupo].get(categoria,0)
+
             registros.append({
-                "SERVICO": s.strip().upper(),
-                "CATEGORIA": classificar(s),
-                "VALOR": row["VALOR"]
+                "SERVICO":s,
+                "CATEGORIA":categoria,
+                "VALOR":valor
             })
 
     df_final = pd.DataFrame(registros)
@@ -99,61 +107,51 @@ if uploaded_file:
         FATURAMENTO=("VALOR","sum")
     ).reset_index()
 
-    servicos_ind = df_final.groupby("SERVICO").agg(
-        QUANTIDADE=("VALOR","count"),
-        FATURAMENTO=("VALOR","sum")
-    ).reset_index()
-
-    # ===== LAYOUT EM COLUNAS =====
-    if layout_opcao == "Completo":
-        col_tabela, col_dashboard = st.columns([2,1])
-    elif layout_opcao == "Somente Dashboard":
-        col_dashboard = st.container()
-        col_tabela = None
-    else:
-        col_tabela = st.container()
-        col_dashboard = None
-
     total_comissao = 0
-    relatorio = []
+    linhas = []
 
-    if col_dashboard:
-        with col_dashboard:
-            st.subheader("Dashboard")
+    for _, row in resumo.iterrows():
+        cat = row["CATEGORIA"]
+        qtd = row["QUANTIDADE"]
+        fat = row["FATURAMENTO"]
+        meta = META_CONFIG[cat]
 
-            for _, row in resumo.iterrows():
-                categoria = row["CATEGORIA"]
-                qtd = row["QUANTIDADE"]
-                fat = row["FATURAMENTO"]
-                cfg = META_CONFIG[categoria]
+        if qtd >= meta["super"]:
+            pct = meta["pct"][2]; faixa="SUPER META"
+        elif qtd >= meta["meta"]:
+            pct = meta["pct"][1]; faixa="META"
+        else:
+            pct = meta["pct"][0]; faixa="BASE"
 
-                if qtd >= cfg["super_qtd"]:
-                    faixa="SUPER META"; pct=cfg["super_pct"]; cor="🟢"
-                elif qtd >= cfg["meta_qtd"]:
-                    faixa="META"; pct=cfg["meta_pct"]; cor="🟡"
-                else:
-                    faixa="BASE"; pct=cfg["base_pct"]; cor="🔴"
+        comissao = fat * pct
+        total_comissao += comissao
 
-                comissao = fat * pct
-                total_comissao += comissao
+        linhas.append([
+            cat,
+            qtd,
+            f"R$ {fat:,.2f}",
+            f"{pct*100:.0f}%",
+            f"R$ {comissao:,.2f}",
+            faixa
+        ])
 
-                st.markdown(f"### {categoria}")
-                st.markdown(f"{cor} {faixa} ({pct*100:.0f}%)")
-                st.markdown(f"Comissão: **R$ {comissao:.2f}**")
-                st.progress(min(qtd/cfg["super_qtd"],1.0))
-                st.markdown("---")
+    tabela = pd.DataFrame(linhas, columns=[
+        "Categoria","Qtd","Faturamento",
+        "% Aplicada","Comissão","Faixa"
+    ])
 
-    if col_tabela:
-        with col_tabela:
-            st.subheader("Serviços Detalhados")
-            st.dataframe(servicos_ind, use_container_width=True)
+    col1, col2 = st.columns([2,1])
 
-    st.markdown("## Comissão Total")
-    st.success(f"R$ {total_comissao:.2f}")
+    with col1:
+        st.subheader("Resumo Geral")
+        st.dataframe(tabela, use_container_width=True)
 
-    # ===== PDF COMPLETO =====
-    if st.button("Exportar Relatório em PDF"):
+    with col2:
+        st.subheader("Dashboard")
+        st.success(f"Comissão Total\nR$ {total_comissao:,.2f}")
 
+    # PDF
+    if st.button("Exportar PDF"):
         temp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
         doc = SimpleDocTemplate(temp.name, pagesize=pagesizes.A4)
         elements = []
@@ -165,28 +163,20 @@ if uploaded_file:
 
         elements.append(Paragraph("Relatório de Performance", styles["Heading1"]))
         elements.append(Spacer(1,12))
-        elements.append(Paragraph(f"Profissional: {nome_profissional}", styles["Normal"]))
-        elements.append(Paragraph(f"Mês: {mes_referencia}", styles["Normal"]))
+        elements.append(Paragraph(f"Profissional: {nome}", styles["Normal"]))
+        elements.append(Paragraph(f"Mês: {mes}", styles["Normal"]))
         elements.append(Spacer(1,12))
 
-        tabela_meta = Table([metas_df.columns.tolist()] + metas_df.values.tolist())
-        tabela_meta.setStyle(TableStyle([
+        tabela_pdf = Table([tabela.columns.tolist()] + tabela.values.tolist())
+        tabela_pdf.setStyle(TableStyle([
             ('BACKGROUND',(0,0),(-1,0),colors.HexColor(AZUL)),
             ('TEXTCOLOR',(0,0),(-1,0),colors.white),
             ('GRID',(0,0),(-1,-1),0.5,colors.grey),
         ]))
 
-        elements.append(Paragraph("Tabela de Metas", styles["Heading2"]))
-        elements.append(tabela_meta)
+        elements.append(tabela_pdf)
         elements.append(Spacer(1,12))
-
-        tabela_serv = Table([servicos_ind.columns.tolist()] + servicos_ind.values.tolist())
-        tabela_serv.setStyle(TableStyle([
-            ('GRID',(0,0),(-1,-1),0.5,colors.grey),
-        ]))
-
-        elements.append(Paragraph("Serviços Detalhados", styles["Heading2"]))
-        elements.append(tabela_serv)
+        elements.append(Paragraph(f"Comissão Total: R$ {total_comissao:,.2f}", styles["Heading2"]))
 
         doc.build(elements)
 
