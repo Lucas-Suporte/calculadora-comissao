@@ -23,7 +23,7 @@ st.markdown("""
 }
 .title-center {
     text-align: center;
-    font-size: 32px;
+    font-size: 34px;
     font-weight: bold;
     margin-bottom: 30px;
 }
@@ -36,18 +36,30 @@ st.markdown("""
     box-shadow: 0 12px 30px rgba(0,0,0,0.25);
     margin-bottom: 30px;
 }
-.card {
-    background: white;
-    padding: 20px;
+.card3d {
+    background: linear-gradient(145deg, #ffffff, #e6e6e6);
+    padding: 18px;
     border-radius: 18px;
-    box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+    box-shadow: 6px 6px 15px rgba(0,0,0,0.15),
+                -6px -6px 15px rgba(255,255,255,0.7);
     margin-bottom: 20px;
+}
+.progress-bar {
+    height: 10px;
+    background-color: #ddd;
+    border-radius: 10px;
+    margin-top: 8px;
+}
+.progress-fill {
+    height: 10px;
+    border-radius: 10px;
+    background: linear-gradient(90deg, #17B3A3, #0B0F6D);
 }
 </style>
 """, unsafe_allow_html=True)
 
 # =====================================
-# LOGO GRANDE CENTRALIZADA
+# LOGO CENTRALIZADA
 # =====================================
 if os.path.exists("logo.png"):
     st.markdown('<div class="logo-center">', unsafe_allow_html=True)
@@ -55,6 +67,19 @@ if os.path.exists("logo.png"):
     st.markdown('</div>', unsafe_allow_html=True)
 
 st.markdown('<div class="title-center">📊 Calculadora de Comissão</div>', unsafe_allow_html=True)
+
+# =====================================
+# CAMPOS MANUAIS
+# =====================================
+col1, col2 = st.columns(2)
+
+with col1:
+    funcionario = st.text_input("Nome do Funcionário")
+
+with col2:
+    mes_referencia = st.text_input("Mês de Referência (Ex: Janeiro/2026)")
+
+st.divider()
 
 # =====================================
 # CONFIG METAS
@@ -67,30 +92,18 @@ META_CONFIG = {
     "TRATAMENTOS": {"meta_qtd": 40, "super_qtd": 70, "base_pct": 0.05, "meta_pct": 0.07, "super_pct": 0.10},
 }
 
-# =====================================
-# UPLOAD CSV
-# =====================================
 uploaded_file = st.file_uploader("Envie a planilha em CSV", type=["csv"])
 
-if uploaded_file:
+if uploaded_file and funcionario and mes_referencia:
 
     try:
-        # Detecta automaticamente separador
         df = pd.read_csv(uploaded_file, sep=None, engine="python")
-
         df.columns = df.columns.str.upper().str.strip()
 
-        col_data = [c for c in df.columns if "DATA" in c][0]
-        col_func = [c for c in df.columns if "FUNC" in c][0]
         col_serv = [c for c in df.columns if "SERV" in c][0]
         col_valor = [c for c in df.columns if "VALOR" in c][0]
 
-        df[col_data] = pd.to_datetime(df[col_data])
         df[col_serv] = df[col_serv].astype(str).str.upper()
-
-        data_inicio = df[col_data].min().strftime("%d/%m/%Y")
-        data_fim = df[col_data].max().strftime("%d/%m/%Y")
-        funcionario = df[col_func].iloc[0]
 
         resumo = []
         total_comissao = 0
@@ -116,45 +129,69 @@ if uploaded_file:
             comissao = fat * pct
             total_comissao += comissao
 
-            resumo.append([
-                categoria,
-                qtd,
-                f"R$ {fat:,.2f}",
-                f"{pct*100:.0f}%",
-                f"R$ {comissao:,.2f}",
-                nivel
-            ])
+            progresso = min((qtd / cfg["super_qtd"]) * 100, 100)
 
-        resumo_df = pd.DataFrame(resumo, columns=[
-            "Categoria",
-            "Qtd",
-            "Faturamento",
-            "% Comissão",
-            "Comissão",
-            "Nível"
-        ])
+            resumo.append({
+                "categoria": categoria,
+                "qtd": qtd,
+                "fat": fat,
+                "pct": pct,
+                "comissao": comissao,
+                "nivel": nivel,
+                "progresso": progresso
+            })
 
         # =====================================
-        # KPI
+        # KPI PRINCIPAL
         # =====================================
         st.markdown(f"""
         <div class="kpi">
             <h2>{funcionario}</h2>
-            <h4>{data_inicio} até {data_fim}</h4>
+            <h4>{mes_referencia}</h4>
             <h1>R$ {total_comissao:,.2f}</h1>
         </div>
         """, unsafe_allow_html=True)
 
-        col1, col2 = st.columns([1.3, 1])
+        col_left, col_right = st.columns([1, 1.4])
 
-        with col1:
+        # =====================================
+        # INDICADORES 3D LADO ESQUERDO
+        # =====================================
+        with col_left:
+            st.subheader("Indicadores de Comissão")
+
+            for item in resumo:
+                st.markdown(f"""
+                <div class="card3d">
+                    <b>{item['categoria']}</b><br>
+                    {item['pct']*100:.0f}% aplicada<br>
+                    Comissão: <b>R$ {item['comissao']:,.2f}</b>
+
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width:{item['progresso']}%;"></div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+        # =====================================
+        # TABELA LADO DIREITO
+        # =====================================
+        with col_right:
             st.subheader("Resumo Financeiro")
-            st.dataframe(resumo_df, use_container_width=True)
 
-        with col2:
-            st.subheader("Status de Metas")
-            for row in resumo:
-                st.success(f"{row[0]} → {row[5]}")
+            tabela_df = pd.DataFrame([
+                [
+                    i["categoria"],
+                    i["qtd"],
+                    f"R$ {i['fat']:,.2f}",
+                    f"{i['pct']*100:.0f}%",
+                    f"R$ {i['comissao']:,.2f}",
+                    i["nivel"]
+                ]
+                for i in resumo
+            ], columns=["Categoria", "Qtd", "Faturamento", "% Comissão", "Comissão", "Nível"])
+
+            st.dataframe(tabela_df, use_container_width=True)
 
         # =====================================
         # PDF
@@ -169,13 +206,13 @@ if uploaded_file:
             elements.append(Paragraph("Relatório de Comissão", styles["Title"]))
             elements.append(Spacer(1, 12))
             elements.append(Paragraph(f"Funcionário: {funcionario}", styles["Normal"]))
-            elements.append(Paragraph(f"Período: {data_inicio} até {data_fim}", styles["Normal"]))
+            elements.append(Paragraph(f"Mês de Referência: {mes_referencia}", styles["Normal"]))
             elements.append(Paragraph(f"Comissão Total: R$ {total_comissao:,.2f}", styles["Normal"]))
             elements.append(Spacer(1, 20))
             elements.append(HRFlowable(width="100%"))
             elements.append(Spacer(1, 20))
 
-            tabela_dados = [resumo_df.columns.tolist()] + resumo_df.values.tolist()
+            tabela_dados = [tabela_df.columns.tolist()] + tabela_df.values.tolist()
             tabela = Table(tabela_dados)
             tabela.setStyle(TableStyle([
                 ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
@@ -194,4 +231,4 @@ if uploaded_file:
             )
 
     except Exception:
-        st.error("Erro ao ler o CSV. Verifique se contém colunas de Data, Funcionário, Serviço e Valor.")
+        st.error("Erro ao ler o CSV. Verifique se contém colunas de Serviço e Valor.")
