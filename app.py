@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import plotly.graph_objects as go
 import os
 
 st.set_page_config(layout="wide")
@@ -36,11 +35,12 @@ body { background-color: #F4F6F9; }
 }
 
 .medal-card {
-    padding: 20px;
-    border-radius: 18px;
-    margin-bottom: 18px;
+    padding: 15px;
+    border-radius: 14px;
+    margin-bottom: 10px;
     color: white;
-    box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+    font-weight: 500;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.15);
 }
 
 .bronze { background: linear-gradient(135deg, #8C6239, #B08D57); }
@@ -53,6 +53,19 @@ body { background-color: #F4F6F9; }
     border-radius: 18px;
     box-shadow: 0 8px 25px rgba(0,0,0,0.10);
     margin-bottom: 25px;
+}
+
+.progress-bar {
+    height: 14px;
+    background-color: #E6E6E6;
+    border-radius: 10px;
+    margin-top: 8px;
+}
+
+.progress-fill {
+    height: 14px;
+    border-radius: 10px;
+    background: linear-gradient(90deg, #1B75BC, #0B0F6D);
 }
 </style>
 """, unsafe_allow_html=True)
@@ -79,7 +92,7 @@ with col2:
 st.divider()
 
 # =========================
-# CONFIGURAÇÃO METAS
+# METAS
 # =========================
 META_CONFIG = {
     "BANHO": {"bronze": 150, "prata": 180, "ouro": 200},
@@ -135,7 +148,6 @@ if uploaded_file and funcionario and mes_referencia:
 
             comissao = fat * pct
             total_comissao += comissao
-
             progresso = min((qtd / metas["ouro"]) * 100, 100)
 
             resultados.append({
@@ -149,9 +161,7 @@ if uploaded_file and funcionario and mes_referencia:
                 "metas": metas
             })
 
-        # =========================
         # KPI PRINCIPAL
-        # =========================
         st.markdown(f"""
         <div class="kpi">
             <h2>{funcionario}</h2>
@@ -164,34 +174,20 @@ if uploaded_file and funcionario and mes_referencia:
         col_left, col_right = st.columns([1, 2])
 
         # =========================
-        # METAS VERTICAIS ESTILO MEDALHAS
+        # METAS VERTICAIS
         # =========================
         with col_left:
             st.subheader("Metas por Categoria")
 
             for cat, metas in META_CONFIG.items():
-                st.markdown(f"""
-                <div class="medal-card bronze">
-                    🥉 Bronze: {metas['bronze']} serviços
-                </div>
-                """, unsafe_allow_html=True)
-
-                st.markdown(f"""
-                <div class="medal-card prata">
-                    🥈 Prata: {metas['prata']} serviços
-                </div>
-                """, unsafe_allow_html=True)
-
-                st.markdown(f"""
-                <div class="medal-card ouro">
-                    🥇 Ouro: {metas['ouro']} serviços
-                </div>
-                """, unsafe_allow_html=True)
-
+                st.markdown(f"### {cat}")
+                st.markdown(f'<div class="medal-card bronze">🥉 Bronze: {metas["bronze"]} serviços</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="medal-card prata">🥈 Prata: {metas["prata"]} serviços</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="medal-card ouro">🥇 Ouro: {metas["ouro"]} serviços</div>', unsafe_allow_html=True)
                 st.markdown("---")
 
         # =========================
-        # INDICADORES COM MINI GRÁFICOS
+        # INDICADORES
         # =========================
         with col_right:
             st.subheader("Indicadores de Performance")
@@ -199,34 +195,24 @@ if uploaded_file and funcionario and mes_referencia:
             for item in resultados:
 
                 st.markdown('<div class="indicador-card">', unsafe_allow_html=True)
+
                 st.markdown(f"### {item['categoria']}")
-                st.markdown(f"Serviços Realizados: **{item['qtd']}**")
-                st.markdown(f"Nível Atual: **{item['nivel']}**")
-                st.markdown(f"Comissão Aplicada: **{item['pct']*100:.0f}%**")
+                st.markdown(f"Serviços realizados: **{item['qtd']}**")
+                st.markdown(f"Nível atual: **{item['nivel']}**")
+                st.markdown(f"Comissão aplicada: **{item['pct']*100:.0f}%**")
+                st.markdown(f"Comissão gerada: **R$ {item['fat'] * item['pct']:,.2f}**")
 
                 if item["faltam"] > 0:
                     st.markdown(f"Faltam **{item['faltam']} serviços** para próxima meta")
                 else:
                     st.markdown("Meta máxima atingida")
 
-                # Mini gráfico gauge
-                fig = go.Figure(go.Indicator(
-                    mode="gauge+number",
-                    value=item["progresso"],
-                    title={'text': "Progresso (%)"},
-                    gauge={
-                        'axis': {'range': [0, 100]},
-                        'bar': {'color': "#0B0F6D"},
-                        'steps': [
-                            {'range': [0, 50], 'color': "#EAEAEA"},
-                            {'range': [50, 80], 'color': "#CFE2F3"},
-                            {'range': [80, 100], 'color': "#A4C2F4"},
-                        ],
-                    }
-                ))
-
-                fig.update_layout(height=250, margin=dict(l=20, r=20, t=40, b=20))
-                st.plotly_chart(fig, use_container_width=True)
+                st.markdown(f"""
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width:{item['progresso']}%;"></div>
+                </div>
+                <small>{item['progresso']:.1f}% da meta Ouro</small>
+                """, unsafe_allow_html=True)
 
                 st.markdown('</div>', unsafe_allow_html=True)
 
