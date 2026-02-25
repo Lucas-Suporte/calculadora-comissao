@@ -24,7 +24,7 @@ div.stFileUploader>div>div>button:hover {background-color: #1B75BC;}
 """, unsafe_allow_html=True)
 
 # =========================
-# Logo centralizado
+# Logo centralizado - tamanho original
 # =========================
 if os.path.exists("logo.png"):
     st.markdown(
@@ -35,7 +35,7 @@ if os.path.exists("logo.png"):
 # =========================
 # Título principal
 # =========================
-st.markdown("<h1 style='text-align:center;'>Relatório de Comissão - Pet24🕒7</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align:center;'>Relatório de Comissão - Pet247</h1>", unsafe_allow_html=True)
 
 # =========================
 # Inputs em negrito
@@ -171,7 +171,7 @@ if uploaded_file and funcionario and mes_referencia:
 
             pdf.set_font("Arial", "B", 16)
             pdf.ln(15)
-            pdf.cell(0, 10, f"Relatório de Comissão - Pet24🕒7", 0, 1, "C")
+            pdf.cell(0, 10, f"Relatório de Comissão - Pet247", 0, 1, "C")
             pdf.set_font("Arial", "B", 12)
             pdf.cell(0, 8, f"Funcionário: {funcionario}", 0, 1)
             pdf.cell(0, 8, f"Mês de Referência: {mes_referencia}", 0, 1)
