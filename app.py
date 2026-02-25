@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import os
+from fpdf import FPDF
 
 st.set_page_config(layout="wide")
 
@@ -10,61 +11,16 @@ st.set_page_config(layout="wide")
 st.markdown("""
 <style>
 body { background-color: #F4F6F9; font-family: 'Arial', sans-serif; }
-
-/* KPI */
-.kpi {
-    background: linear-gradient(135deg, #0B0F6D, #1B75BC);
-    color: white;
-    padding: 30px;
-    border-radius: 20px;
-    text-align: center;
-    margin-bottom: 30px;
-}
-
-/* Cards */
-.card {
-    padding: 15px;
-    border-radius: 12px;
-    margin: 5px;
-    background: linear-gradient(135deg, #0B0F6D, #1B75BC);
-    color: white;
-    text-align: center;
-    font-size: 14px;
-}
+.kpi {background: linear-gradient(135deg, #0B0F6D, #1B75BC); color: white; padding: 30px; border-radius: 20px; text-align: center; margin-bottom: 30px;}
+.card {padding: 15px; border-radius: 12px; margin: 5px; background: linear-gradient(135deg, #0B0F6D, #1B75BC); color: white; text-align: center; font-size: 14px;}
 .card h4 {margin-bottom: 8px; font-size: 16px;}
 .card p {margin: 2px; font-size: 14px;}
 .card .comissao {margin-top: 8px; font-weight: bold; font-size: 16px;}
-
-/* Inputs destacados */
-input[type="text"] {
-    border: 2px solid #0B0F6D !important;
-    border-radius: 8px;
-    padding: 8px;
-    font-size: 16px;
-}
-
-/* File Uploader estilizado */
-div.stFileUploader>div>div>button {
-    background-color: #0B0F6D;
-    color: white;
-    border-radius: 8px;
-    padding: 8px 20px;
-    font-weight: bold;
-    font-size: 14px;
-}
-div.stFileUploader>div>div>button:hover {
-    background-color: #1B75BC;
-}
-
-/* Tabela */
-.stDataFrame th {
-    background-color: #0B0F6D !important;
-    color: white !important;
-    text-align: center;
-}
-.stDataFrame td {
-    text-align: center;
-}
+input[type="text"] {border: 2px solid #0B0F6D !important; border-radius: 8px; padding: 8px; font-size: 16px;}
+div.stFileUploader>div>div>button {background-color: #0B0F6D; color: white; border-radius: 8px; padding: 8px 20px; font-weight: bold; font-size: 14px;}
+div.stFileUploader>div>div>button:hover {background-color: #1B75BC;}
+.stDataFrame th {background-color: #0B0F6D !important; color: white !important; text-align: center;}
+.stDataFrame td {text-align: center;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -72,30 +28,23 @@ div.stFileUploader>div>div>button:hover {
 # Logo e título centralizados
 # =========================
 if os.path.exists("logo.png"):
-    st.markdown(
-        f"""
-        <div style='text-align:center; margin-bottom:20px;'>
-            <img src='logo.png' width='500'>
-        </div>
-        """, 
-        unsafe_allow_html=True
-    )
-
+    st.markdown(f"<div style='text-align:center; margin-bottom:20px;'><img src='logo.png' width='300'></div>", unsafe_allow_html=True)
 st.markdown("<h1 style='text-align:center;'>Relatório de Comissão - Pet24🕒7</h1>", unsafe_allow_html=True)
 
 # =========================
 # Inputs
 # =========================
-col1, col2 = st.columns(2)
-with col1:
-    funcionario = st.text_input("Nome do Funcionário")
-with col2:
-    mes_referencia = st.text_input("Mês de Referência")
+st.markdown("<b>Nome do Funcionário</b>", unsafe_allow_html=True)
+funcionario = st.text_input("", placeholder="Digite o nome do funcionário")
 
-uploaded_file = st.file_uploader("Envie a planilha CSV", type=["csv"])
+st.markdown("<b>Mês de Referência</b>", unsafe_allow_html=True)
+mes_referencia = st.text_input("", placeholder="Digite o mês de referência")
+
+st.markdown("<b>Envie a planilha CSV</b>", unsafe_allow_html=True)
+uploaded_file = st.file_uploader("", type=["csv"])
 
 # =========================
-# Configuração de metas e porcentagens
+# Configuração de metas
 # =========================
 META_CONFIG = {
     "BANHO": {"base":3,"meta":4,"super":5,"bronze":150,"prata":180,"ouro":200},
@@ -110,20 +59,13 @@ SERVICE_MAP = {
     "TOSA HIGIENICA": ["Tosa Higiênica", "Tosa de Acabamento"],
     "TOSA MAQUINA": ["Tosa à Máquina", "Tosa à Máquina (sb)"],
     "TOSA TESOURA": ["Tosa à Tesoura", "Tosa à Tesoura (sb)", "Tosa à Tesoura Gato"],
-    "TRATAMENTOS": [
-        "Hidratação",
-        "Remoção de Subpelos",
-        "Higiene Bucal",
-        "Corte de Unhas",
-        "Desembaraço Leve (30min)",
-        "Desembaraço Médio (1h)",
-        "Desembaraço Pesado (2h)",
-        "Corte de Unhas Gato"
-    ]
+    "TRATAMENTOS": ["Hidratação","Remoção de Subpelos","Higiene Bucal","Corte de Unhas",
+                     "Desembaraço Leve (30min)","Desembaraço Médio (1h)","Desembaraço Pesado (2h)",
+                     "Corte de Unhas Gato"]
 }
 
 # =========================
-# Processamento
+# Processamento CSV
 # =========================
 if uploaded_file and funcionario and mes_referencia:
     try:
@@ -141,7 +83,6 @@ if uploaded_file and funcionario and mes_referencia:
 
         resultados = []
         total_comissao = 0
-        total_faturamento = 0
 
         for cat, metas in META_CONFIG.items():
             termos = SERVICE_MAP[cat]
@@ -168,7 +109,6 @@ if uploaded_file and funcionario and mes_referencia:
 
             comissao = faturamento * pct
             total_comissao += comissao
-            total_faturamento += faturamento
 
             resultados.append({
                 "Serviço": cat,
@@ -179,17 +119,11 @@ if uploaded_file and funcionario and mes_referencia:
             })
 
         # =========================
-        # KPI
-        # =========================
-        st.markdown(f"<div class='kpi'><h2>{funcionario}</h2><h4>{mes_referencia}</h4><h1>R$ {total_comissao:,.2f}</h1><p>Comissão Total</p></div>", unsafe_allow_html=True)
-
-        # =========================
         # Cards lado a lado
         # =========================
         st.subheader("Resumo por Serviço")
         col1, col2, col3, col4, col5 = st.columns(5)
         card_columns = [col1, col2, col3, col4, col5]
-
         for i, item in enumerate(resultados):
             col = card_columns[i % 5]
             col.markdown(
@@ -200,26 +134,38 @@ if uploaded_file and funcionario and mes_referencia:
             )
 
         # =========================
-        # Resumo Geral
+        # Opção de gerar PDF
         # =========================
-        st.subheader("Resumo Geral")
-        st.write(f"**Faturamento Total:** R$ {total_faturamento:,.2f}")
-        st.write(f"**Comissão Total:** R$ {total_comissao:,.2f}")
+        st.subheader("Gerar Relatório em PDF")
+        if st.button("📄 Gerar PDF"):
+            pdf = FPDF(orientation="P", unit="mm", format="A4")
+            pdf.add_page()
 
-        # =========================
-        # Tabela de metas padrão
-        # =========================
-        st.subheader("Tabela de Metas Base")
-        metas_df = pd.DataFrame({
-            "Serviço": ["Banho", "Tosa Higiênica", "Tosa à Máquina", "Tosa à Tesoura", "Tratamentos"],
-            "Base (Qtd)": [META_CONFIG[s]["bronze"] for s in META_CONFIG],
-            "Base (%)": [f"{META_CONFIG[s]['base']}%" for s in META_CONFIG],
-            "Meta (Qtd)": [META_CONFIG[s]["prata"] for s in META_CONFIG],
-            "Meta (%)": [f"{META_CONFIG[s]['meta']}%" for s in META_CONFIG],
-            "Super Meta (Qtd)": [META_CONFIG[s]["ouro"] for s in META_CONFIG],
-            "Super Meta (%)": [f"{META_CONFIG[s]['super']}%" for s in META_CONFIG],
-        })
-        st.dataframe(metas_df, use_container_width=True)
+            # Logo
+            if os.path.exists("logo.png"):
+                pdf.image("logo.png", x=80, w=50)
+
+            pdf.set_font("Arial", "B", 16)
+            pdf.ln(15)
+            pdf.cell(0, 10, f"Relatório de Comissão - Pet24🕒7", 0, 1, "C")
+            pdf.set_font("Arial", "B", 12)
+            pdf.cell(0, 8, f"Funcionário: {funcionario}", 0, 1)
+            pdf.cell(0, 8, f"Mês de Referência: {mes_referencia}", 0, 1)
+            pdf.ln(5)
+
+            pdf.set_font("Arial", "B", 12)
+            for item in resultados:
+                pdf.set_fill_color(11, 15, 109)  # azul da marca
+                pdf.set_text_color(255, 255, 255)
+                pdf.cell(0, 10, f"{item['Serviço']}", 0, 1, fill=True)
+                pdf.set_fill_color(255, 255, 255)
+                pdf.set_text_color(0, 0, 0)
+                pdf.cell(0, 8, f"Qtd: {item['Quantidade']}   |   Meta: {item['Meta Alcançada']} ({item['Porcentagem']})   |   Comissão: R$ {item['Comissão']:.2f}", 0, 1)
+                pdf.ln(2)
+
+            pdf_output = f"Relatorio_Comissao_{funcionario}.pdf"
+            pdf.output(pdf_output)
+            st.success(f"PDF gerado: {pdf_output}")
 
     except Exception as e:
         st.error(f"Erro ao processar CSV: {e}")
