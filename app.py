@@ -5,14 +5,18 @@ import os
 st.set_page_config(layout="wide")
 
 # =========================
-# CSS moderno
+# CSS moderno para cards lado a lado
 # =========================
 st.markdown("""
 <style>
 body { background-color: #F4F6F9; font-family: 'Arial', sans-serif; }
 .kpi {background: linear-gradient(135deg, #0B0F6D, #1B75BC); color: white; padding: 30px; border-radius: 20px; text-align: center; margin-bottom: 30px;}
-.card {background: white; padding: 15px; border-radius: 15px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); margin-bottom: 15px;}
-.stDataFrame div.row_heading, .stDataFrame div.blank {background-color: #1B75BC !important; color: white !important;}
+.card {padding: 12px; border-radius: 12px; margin: 5px; color: white; text-align: center; font-size: 14px;}
+.banho {background: linear-gradient(135deg, #0B0F6D, #1B75BC);}
+.tosa_higienica {background: linear-gradient(135deg, #C6A700, #FFD700);}
+.tosa_maquina {background: linear-gradient(135deg, #7B1FA2, #9C27B0);}
+.tosa_tesoura {background: linear-gradient(135deg, #FF5722, #FF7043);}
+.tratamentos {background: linear-gradient(135deg, #4CAF50, #81C784);}
 </style>
 """, unsafe_allow_html=True)
 
@@ -47,7 +51,7 @@ META_CONFIG = {
 }
 
 # =========================
-# MAPA DE SERVIÇOS
+# MAPA DE SERVIÇOS (nomes revisados)
 # =========================
 SERVICE_MAP = {
     "BANHO": ["Banho", "Banho + Hidratação", "Banho + Tosa Higiênica"],
@@ -83,7 +87,6 @@ if uploaded_file and funcionario and mes_referencia:
             .str.strip()
         )
         df["VALOR"] = pd.to_numeric(df["VALOR"], errors="coerce").fillna(0)
-
         df["SERVICO"] = df["SERVICO"].str.strip()
 
         resultados = []
@@ -104,7 +107,7 @@ if uploaded_file and funcionario and mes_referencia:
             elif qtd >= metas["bronze"]:
                 pct = metas["base"]/100
             else:
-                pct = metas["base"]/100  # aplica base mesmo se não atingiu bronze
+                pct = metas["base"]/100
 
             comissao = faturamento * pct
             total_comissao += comissao
@@ -123,12 +126,24 @@ if uploaded_file and funcionario and mes_referencia:
         st.markdown(f"<div class='kpi'><h2>{funcionario}</h2><h4>{mes_referencia}</h4><h1>R$ {total_comissao:,.2f}</h1><p>Comissão Total</p></div>", unsafe_allow_html=True)
 
         # =========================
-        # Cards modernos por serviço
+        # Cards menores lado a lado com cores
         # =========================
         st.subheader("Resumo por Serviço")
-        for item in resultados:
-            st.markdown(
-                f"<div class='card'><h3>{item['Serviço']}</h3><p>Quantidade: {item['Quantidade']}<br>% Aplicada: {item['% Aplicada']}<br>Comissão: R$ {item['Comissão (R$)']:.2f}</p></div>",
+        col1, col2, col3, col4, col5 = st.columns(5)
+        card_columns = [col1, col2, col3, col4, col5]
+        color_classes = {
+            "BANHO": "banho",
+            "TOSA HIGIENICA": "tosa_higienica",
+            "TOSA MAQUINA": "tosa_maquina",
+            "TOSA TESOURA": "tosa_tesoura",
+            "TRATAMENTOS": "tratamentos"
+        }
+
+        for i, item in enumerate(resultados):
+            col = card_columns[i % 5]
+            color = color_classes[item["Serviço"]]
+            col.markdown(
+                f"<div class='card {color}'><h4>{item['Serviço']}</h4><p>Qtd: {item['Quantidade']}<br>%: {item['% Aplicada']}<br>R$ {item['Comissão (R$)']:.2f}</p></div>",
                 unsafe_allow_html=True
             )
 
