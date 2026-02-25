@@ -1,9 +1,9 @@
-from fpdf import FPDF
 import streamlit as st
 import pandas as pd
-import os
 import unicodedata
 from io import BytesIO
+from fpdf import FPDF
+import os
 
 st.set_page_config(layout="wide")
 
@@ -27,6 +27,9 @@ with col2:
 
 uploaded_file = st.file_uploader("Envie a planilha CSV extraída do Tecpet", type=["csv"])
 
+# =========================
+# PROCESSAMENTO CSV
+# =========================
 if uploaded_file and funcionario and mes_referencia:
     try:
         df = pd.read_csv(uploaded_file, sep=None, engine="python")
@@ -91,8 +94,12 @@ if uploaded_file and funcionario and mes_referencia:
         # =========================
         class PDF(FPDF):
             def header(self):
+                # salvar logo temporário
                 if os.path.exists("logo.png"):
-                    self.image("logo.png", 10, 8, 50)
+                    temp_logo = "logo_temp.png"
+                    with open(temp_logo, "wb") as f:
+                        f.write(open("logo.png", "rb").read())
+                    self.image(temp_logo, 10, 8, 50)
                 self.set_font('Arial', 'B', 14)
                 self.cell(0, 10, f'Relatório de Comissão - {funcionario}', ln=True, align='C')
                 self.set_font('Arial', '', 12)
@@ -126,12 +133,17 @@ if uploaded_file and funcionario and mes_referencia:
 
         output = BytesIO()
         pdf.output(output)
+
+        # =========================
+        # BOTÕES DE DOWNLOAD E VISUALIZAÇÃO
+        # =========================
         st.download_button(
-            label="Baixar Relatório em PDF",
+            label="📥 Baixar Relatório em PDF",
             data=output.getvalue(),
             file_name=f"Relatorio_Comissao_{funcionario}.pdf",
             mime="application/pdf"
         )
+        st.info("💡 Abra o PDF no seu computador para imprimir ou salvar.")
 
     except Exception as e:
         st.error(f"Erro ao processar CSV: {e}")
