@@ -1,40 +1,35 @@
 import streamlit as st
 import pandas as pd
-import tempfile
-from datetime import datetime
 import matplotlib.pyplot as plt
+import tempfile
 
 from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table,
     TableStyle, Image
 )
 from reportlab.lib import colors
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib import pagesizes
 from reportlab.lib.units import inch
 
-# CONFIGURAÇÃO DA PÁGINA
-st.set_page_config(page_title="Performance Tosador – PET247", layout="wide")
+st.set_page_config(page_title="Dashboard Performance – PET247", layout="wide")
 
 # CORES DA MARCA
-AZUL = colors.HexColor("#0B0F6D")
-VERDE = colors.HexColor("#17B3A3")
+AZUL = "#0B0F6D"
+VERDE = "#17B3A3"
 
-st.markdown("<h1 style='color:#0B0F6D'>🐾 Performance – PET247 Market</h1>", unsafe_allow_html=True)
+st.markdown(f"<h1 style='color:{AZUL}'>🐾 Dashboard Performance - PET247</h1>", unsafe_allow_html=True)
 
 uploaded_file = st.file_uploader("Envie a planilha (.xlsx ou .csv)", type=["xlsx", "csv"])
 nome_profissional = st.text_input("Nome do Profissional")
-mes_referencia = st.text_input("Mês de Referência (ex: Janeiro/2026)")
-periodo = st.text_input("Período Analisado (ex: 01/01/2026 a 31/01/2026)")
-observacoes = st.text_area("Observações")
-desmembrar = st.checkbox("Visualizar serviços desmembrados")
+mes_referencia = st.text_input("Mês de Referência")
 
 META_CONFIG = {
-    "BANHO": {"base": 129, "meta": 130, "super": 176},
-    "TOSA HIGIENICA": {"base": 19, "meta": 20, "super": 40},
-    "TOSA MAQUINA": {"base": 14, "meta": 15, "super": 30},
-    "TOSA TESOURA": {"base": 14, "meta": 15, "super": 30},
-    "TRATAMENTOS": {"base": 14, "meta": 15, "super": 30},
+    "BANHO": 130,
+    "TOSA HIGIENICA": 20,
+    "TOSA MAQUINA": 15,
+    "TOSA TESOURA": 15,
+    "TRATAMENTOS": 15,
 }
 
 def classificar(servico):
@@ -51,23 +46,21 @@ def classificar(servico):
 
 if uploaded_file:
 
-    # LEITURA DO ARQUIVO
+    # LEITURA
     if uploaded_file.name.endswith(".csv"):
         df = pd.read_csv(uploaded_file)
     else:
         df = pd.read_excel(uploaded_file)
 
-    # NORMALIZAÇÃO DAS COLUNAS
     df.columns = df.columns.str.upper().str.strip()
 
     if "SERVICO" not in df.columns or "VALOR" not in df.columns:
-        st.error("A planilha precisa conter as colunas SERVICO e VALOR.")
+        st.error("A planilha precisa conter SERVICO e VALOR.")
         st.write("Colunas encontradas:", df.columns.tolist())
         st.stop()
 
     df = df[["SERVICO", "VALOR"]].dropna()
 
-    # TRATAMENTO DO VALOR
     df["VALOR"] = (
         df["VALOR"]
         .astype(str)
@@ -84,106 +77,102 @@ if uploaded_file:
         servicos = str(row["SERVICO"]).split("+")
         for s in servicos:
             registros.append({
+                "SERVICO": s.strip().upper(),
                 "CATEGORIA": classificar(s.strip()),
-                "SERVICO_ORIGINAL": row["SERVICO"],
                 "VALOR": row["VALOR"]
             })
 
     df_final = pd.DataFrame(registros)
 
-    # PROTEÇÃO CONTRA ERRO
     if df_final.empty:
-        st.error("Nenhum serviço foi identificado. Verifique os nomes na coluna SERVICO.")
+        st.error("Nenhum serviço identificado.")
         st.stop()
 
-    if "CATEGORIA" not in df_final.columns:
-        st.error("Erro interno: coluna CATEGORIA não foi criada.")
-        st.stop()
-
+    # RESUMO POR CATEGORIA
     resumo = df_final.groupby("CATEGORIA").agg(
         QUANTIDADE=("VALOR", "count"),
         FATURAMENTO=("VALOR", "sum")
     ).reset_index()
 
-    st.subheader("Resumo Geral")
-    st.dataframe(resumo)
+    # RESUMO POR SERVIÇO INDIVIDUAL
+    servicos_individuais = df_final.groupby("SERVICO").agg(
+        QUANTIDADE=("VALOR", "count"),
+        FATURAMENTO=("VALOR", "sum")
+    ).reset_index()
 
-    if desmembrar:
-        st.subheader("Serviços Desmembrados")
-        st.dataframe(df_final)
+    # DASHBOARD EM COLUNAS
+    col1, col2 = st.columns([2,1])
 
-    # MINI GRÁFICO
-    st.subheader("Gráfico de Performance")
-    fig = plt.figure()
-    plt.bar(resumo["CATEGORIA"], resumo["QUANTIDADE"])
-    plt.xticks(rotation=45)
-    st.pyplot(fig)
+    with col1:
+        st.subheader("Performance por Categoria")
 
-    # ANÁLISE DE METAS
-    st.subheader("Análise de Metas")
+        for _, row in resumo.iterrows():
+            categoria = row["CATEGORIA"]
+            qtd = row["QUANTIDADE"]
+            meta = META_CONFIG.get(categoria, 1)
 
-    for _, row in resumo.iterrows():
-        categoria = row["CATEGORIA"]
-        qtd = row["QUANTIDADE"]
-        meta = META_CONFIG[categoria]["meta"]
+            progresso = min(qtd / meta, 1.0)
+            falta = max(meta - qtd, 0)
 
-        if qtd < meta:
-            falta = meta - qtd
-            st.warning(f"{categoria}: Faltam {falta} serviços para atingir a próxima meta.")
-        else:
-            st.success(f"{categoria}: Meta atingida ou superada.")
+            st.markdown(f"### {categoria}")
+            st.progress(progresso)
 
-    # GERAR PDF
-    if st.button("Gerar Relatório em PDF"):
+            if falta > 0:
+                st.markdown(f"🔴 Faltam **{falta} serviços** para atingir a meta.")
+            else:
+                st.markdown("🟢 Meta atingida.")
+
+            st.markdown(f"Total realizado: **{qtd}**")
+            st.markdown("---")
+
+    with col2:
+        st.subheader("Gráfico Resumido")
+
+        fig = plt.figure(figsize=(4,3))
+        plt.bar(resumo["CATEGORIA"], resumo["QUANTIDADE"])
+        plt.xticks(rotation=45)
+        st.pyplot(fig)
+
+    st.subheader("Serviços Discriminados Individualmente")
+    st.dataframe(servicos_individuais, use_container_width=True)
+
+    # EXPORTAR PDF
+    if st.button("Exportar Relatório em PDF"):
 
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
         doc = SimpleDocTemplate(temp_file.name, pagesize=pagesizes.A4)
         elements = []
         styles = getSampleStyleSheet()
 
-        # LOGO
         try:
             elements.append(Image("logo.png", width=3*inch, height=1*inch))
             elements.append(Spacer(1, 0.3 * inch))
         except:
             pass
 
-        titulo_style = ParagraphStyle(
-            'titulo',
-            parent=styles['Heading1'],
-            textColor=AZUL
-        )
-
-        elements.append(Paragraph("Relatório de Performance", titulo_style))
+        elements.append(Paragraph(f"Relatório de Performance - {mes_referencia}", styles["Heading1"]))
         elements.append(Spacer(1, 0.3 * inch))
 
         elements.append(Paragraph(f"Profissional: {nome_profissional}", styles["Normal"]))
-        elements.append(Paragraph(f"Mês de Referência: {mes_referencia}", styles["Normal"]))
-        elements.append(Paragraph(f"Período: {periodo}", styles["Normal"]))
         elements.append(Spacer(1, 0.3 * inch))
 
-        tabela = [["Categoria", "Qtd", "Faturamento"]]
+        tabela = [["Serviço", "Qtd", "Faturamento"]]
 
-        for _, row in resumo.iterrows():
+        for _, row in servicos_individuais.iterrows():
             tabela.append([
-                row["CATEGORIA"],
+                row["SERVICO"],
                 row["QUANTIDADE"],
                 f"R$ {row['FATURAMENTO']:.2f}"
             ])
 
         table = Table(tabela)
         table.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), AZUL),
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor(AZUL)),
             ('TEXTCOLOR',(0,0),(-1,0),colors.white),
             ('GRID', (0,0), (-1,-1), 1, colors.grey),
         ]))
 
         elements.append(table)
-        elements.append(Spacer(1, 0.3 * inch))
-
-        elements.append(Paragraph("Observações:", styles["Heading2"]))
-        elements.append(Paragraph(observacoes if observacoes else "-", styles["Normal"]))
-
         doc.build(elements)
 
         with open(temp_file.name, "rb") as f:
