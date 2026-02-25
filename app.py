@@ -1,63 +1,52 @@
 import streamlit as st
 import pandas as pd
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-from reportlab.lib import colors
-from reportlab.lib.styles import ParagraphStyle
-from reportlab.lib import pagesizes
-from reportlab.lib.units import inch
-from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.pdfbase import pdfmetrics
-from reportlab.lib.styles import getSampleStyleSheet
 import tempfile
 from datetime import datetime
+import matplotlib.pyplot as plt
 
-st.set_page_config(page_title="Calculadora de Performance – Tosador", layout="wide")
+from reportlab.platypus import (
+    SimpleDocTemplate, Paragraph, Spacer, Table,
+    TableStyle, Image
+)
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import pagesizes
+from reportlab.lib.units import inch
 
-st.title("🐾 Calculadora de Performance – Tosador")
+st.set_page_config(page_title="Performance Tosador – PET247", layout="wide")
+
+# CORES DA MARCA
+AZUL = colors.HexColor("#0B0F6D")
+VERDE = colors.HexColor("#17B3A3")
+
+st.markdown("<h1 style='color:#0B0F6D'>🐾 Performance – PET247 Market</h1>", unsafe_allow_html=True)
 
 uploaded_file = st.file_uploader("Envie a planilha (.xlsx ou .csv)", type=["xlsx", "csv"])
 nome_profissional = st.text_input("Nome do Profissional")
+mes_referencia = st.text_input("Mês de Referência (ex: Janeiro/2026)")
+periodo = st.text_input("Período Analisado (ex: 01/01/2026 a 31/01/2026)")
+observacoes = st.text_area("Observações")
+desmembrar = st.checkbox("Visualizar serviços desmembrados")
 
 META_CONFIG = {
-    "BANHO": {"base": 129, "meta": 130, "super": 176, "perc": [0.03, 0.04, 0.05]},
-    "TOSA HIGIENICA": {"base": 19, "meta": 20, "super": 40, "perc": [0.10, 0.15, 0.20]},
-    "TOSA MAQUINA": {"base": 14, "meta": 15, "super": 30, "perc": [0.10, 0.15, 0.20]},
-    "TOSA TESOURA": {"base": 14, "meta": 15, "super": 30, "perc": [0.15, 0.20, 0.25]},
-    "TRATAMENTOS": {"base": 14, "meta": 15, "super": 30, "perc": [0.15, 0.20, 0.25]},
+    "BANHO": {"base": 129, "meta": 130, "super": 176},
+    "TOSA HIGIENICA": {"base": 19, "meta": 20, "super": 40},
+    "TOSA MAQUINA": {"base": 14, "meta": 15, "super": 30},
+    "TOSA TESOURA": {"base": 14, "meta": 15, "super": 30},
+    "TRATAMENTOS": {"base": 14, "meta": 15, "super": 30},
 }
 
-TRATAMENTOS_LISTA = [
-    "REMOCAO DE SUBPELO",
-    "HIDRATACAO",
-    "CORTE DE UNHAS",
-    "HIGIENE BUCAL",
-    "DESEMBARACO LEVE",
-    "DESEMBARACO MEDIO",
-    "DESEMBARACO PESADO",
-]
-
-def classificar_servico(servico):
-    servico = servico.upper().strip()
-    if "BANHO" in servico:
+def classificar(servico):
+    s = servico.upper()
+    if "BANHO" in s:
         return "BANHO"
-    if "HIGIENICA" in servico:
+    if "HIGIENICA" in s:
         return "TOSA HIGIENICA"
-    if "MAQUINA" in servico:
+    if "MAQUINA" in s:
         return "TOSA MAQUINA"
-    if "TESOURA" in servico:
+    if "TESOURA" in s:
         return "TOSA TESOURA"
-    for t in TRATAMENTOS_LISTA:
-        if t in servico:
-            return "TRATAMENTOS"
-    return None
-
-def calcular_percentual(qtd, config):
-    if qtd >= config["super"]:
-        return config["perc"][2]
-    elif qtd >= config["meta"]:
-        return config["perc"][1]
-    else:
-        return config["perc"][0]
+    return "TRATAMENTOS"
 
 if uploaded_file:
 
@@ -66,98 +55,107 @@ if uploaded_file:
     else:
         df = pd.read_excel(uploaded_file)
 
-    if "SERVICO" not in df.columns or "VALOR" not in df.columns:
-        st.error("A planilha precisa conter as colunas SERVICO e VALOR.")
-    else:
-        df = df[["SERVICO", "VALOR"]].dropna()
+    df = df[["SERVICO", "VALOR"]].dropna()
+    df["VALOR"] = pd.to_numeric(df["VALOR"], errors="coerce")
+    df = df.dropna()
 
-        df["VALOR"] = (
-            df["VALOR"]
-            .astype(str)
-            .str.replace(",", ".", regex=False)
-            .str.replace("-", "", regex=False)
+    registros = []
+
+    for _, row in df.iterrows():
+        servicos = row["SERVICO"].split("+")
+        for s in servicos:
+            registros.append({
+                "CATEGORIA": classificar(s.strip()),
+                "SERVICO_ORIGINAL": row["SERVICO"],
+                "VALOR": row["VALOR"]
+            })
+
+    df_final = pd.DataFrame(registros)
+
+    resumo = df_final.groupby("CATEGORIA").agg(
+        QUANTIDADE=("VALOR", "count"),
+        FATURAMENTO=("VALOR", "sum")
+    ).reset_index()
+
+    st.subheader("Resumo Geral")
+    st.dataframe(resumo)
+
+    if desmembrar:
+        st.subheader("Serviços Desmembrados")
+        st.dataframe(df_final)
+
+    # MINI GRÁFICO
+    fig = plt.figure()
+    plt.bar(resumo["CATEGORIA"], resumo["QUANTIDADE"])
+    plt.xticks(rotation=45)
+    st.pyplot(fig)
+
+    # META
+    st.subheader("Análise de Metas")
+    for _, row in resumo.iterrows():
+        categoria = row["CATEGORIA"]
+        qtd = row["QUANTIDADE"]
+        meta = META_CONFIG[categoria]["meta"]
+
+        if qtd < meta:
+            falta = meta - qtd
+            st.warning(f"{categoria}: Faltam {falta} serviços para atingir a próxima meta.")
+        else:
+            st.success(f"{categoria}: Meta atingida ou superada.")
+
+    # GERAR PDF
+    if st.button("Gerar Relatório em PDF"):
+
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+        doc = SimpleDocTemplate(temp_file.name, pagesize=pagesizes.A4)
+        elements = []
+        styles = getSampleStyleSheet()
+
+        elements.append(Image("logo.png", width=3*inch, height=1*inch))
+        elements.append(Spacer(1, 0.3 * inch))
+
+        titulo_style = ParagraphStyle(
+            'titulo',
+            parent=styles['Heading1'],
+            textColor=AZUL
         )
-        df["VALOR"] = pd.to_numeric(df["VALOR"], errors="coerce")
-        df = df.dropna()
 
-        registros = []
+        elements.append(Paragraph("Relatório de Performance", titulo_style))
+        elements.append(Spacer(1, 0.3 * inch))
 
-        for _, row in df.iterrows():
-            servicos = str(row["SERVICO"]).upper().split("+")
-            valor = row["VALOR"]
-            for s in servicos:
-                categoria = classificar_servico(s.strip())
-                if categoria:
-                    registros.append({"CATEGORIA": categoria, "VALOR": valor})
+        elements.append(Paragraph(f"Profissional: {nome_profissional}", styles["Normal"]))
+        elements.append(Paragraph(f"Mês de Referência: {mes_referencia}", styles["Normal"]))
+        elements.append(Paragraph(f"Período: {periodo}", styles["Normal"]))
+        elements.append(Spacer(1, 0.3 * inch))
 
-        df_final = pd.DataFrame(registros)
-
-        resumo = df_final.groupby("CATEGORIA").agg(
-            QUANTIDADE=("VALOR", "count"),
-            FATURAMENTO=("VALOR", "sum")
-        ).reset_index()
-
-        resultados = []
+        tabela = [["Categoria", "Qtd", "Faturamento"]]
 
         for _, row in resumo.iterrows():
-            categoria = row["CATEGORIA"]
-            qtd = row["QUANTIDADE"]
-            faturamento = row["FATURAMENTO"]
-
-            config = META_CONFIG[categoria]
-            perc = calcular_percentual(qtd, config)
-            comissao = faturamento * perc
-
-            resultados.append([
-                categoria,
-                qtd,
-                f"R$ {faturamento:.2f}",
-                f"{int(perc*100)}%",
-                f"R$ {comissao:.2f}"
+            tabela.append([
+                row["CATEGORIA"],
+                row["QUANTIDADE"],
+                f"R$ {row['FATURAMENTO']:.2f}"
             ])
 
-        total_comissao = sum(
-            float(r[4].replace("R$ ", "")) for r in resultados
-        )
+        table = Table(tabela)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), AZUL),
+            ('TEXTCOLOR',(0,0),(-1,0),colors.white),
+            ('GRID', (0,0), (-1,-1), 1, colors.grey),
+        ]))
 
-        st.subheader("📊 Resultado")
-        st.table(resultados)
-        st.subheader(f"💰 Comissão Total: R$ {total_comissao:.2f}")
+        elements.append(table)
+        elements.append(Spacer(1, 0.3 * inch))
 
-        if st.button("📄 Gerar PDF"):
+        elements.append(Paragraph(f"Observações:", styles["Heading2"]))
+        elements.append(Paragraph(observacoes, styles["Normal"]))
 
-            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-            doc = SimpleDocTemplate(temp_file.name, pagesize=pagesizes.A4)
-            elements = []
-            styles = getSampleStyleSheet()
+        doc.build(elements)
 
-            elements.append(Paragraph("Relatório de Comissão", styles["Heading1"]))
-            elements.append(Spacer(1, 0.3 * inch))
-
-            elements.append(Paragraph(f"Profissional: {nome_profissional}", styles["Normal"]))
-            elements.append(Paragraph(f"Data: {datetime.now().strftime('%d/%m/%Y')}", styles["Normal"]))
-            elements.append(Spacer(1, 0.3 * inch))
-
-            table_data = [["Categoria", "Qtde", "Faturamento", "%", "Comissão"]]
-            table_data += resultados
-
-            table = Table(table_data)
-            table.setStyle(TableStyle([
-                ('BACKGROUND', (0,0), (-1,0), colors.grey),
-                ('TEXTCOLOR',(0,0),(-1,0),colors.whitesmoke),
-                ('GRID', (0,0), (-1,-1), 1, colors.black),
-            ]))
-
-            elements.append(table)
-            elements.append(Spacer(1, 0.3 * inch))
-            elements.append(Paragraph(f"Comissão Total: R$ {total_comissao:.2f}", styles["Heading2"]))
-
-            doc.build(elements)
-
-            with open(temp_file.name, "rb") as f:
-                st.download_button(
-                    label="📥 Baixar PDF",
-                    data=f,
-                    file_name="relatorio_comissao.pdf",
-                    mime="application/pdf"
-                )
+        with open(temp_file.name, "rb") as f:
+            st.download_button(
+                "Baixar PDF",
+                f,
+                file_name="Relatorio_Performance_PET247.pdf",
+                mime="application/pdf"
+            )
