@@ -210,9 +210,10 @@ else:
             qtd_real = item["Quantidade"]
             meta = item["Meta Ouro"]
             st.markdown(f"### {item['Categoria']} ({qtd_real}/{meta})")
+            cor = '#C6A700' if item['Nível']=='OURO' else '#BDC3C7' if item['Nível']=='PRATA' else '#B08D57' if item['Nível']=='BRONZE' else '#E6E6E6'
             st.markdown(f"""
             <div class="progress-bar">
-                <div class="progress-fill" style="width:{item['Progresso']*100}%; background:{'#C6A700' if item['Nível']=='OURO' else '#BDC3C7' if item['Nível']=='PRATA' else '#B08D57' if item['Nível']=='BRONZE' else '#E6E6E6'}">{qtd_real}</div>
+                <div class="progress-fill" style="width:{item['Progresso']*100}%; background:{cor}">{qtd_real}</div>
             </div>
             """, unsafe_allow_html=True)
 
@@ -220,7 +221,7 @@ else:
         # DOWNLOAD RELATÓRIO
         # =========================
         output = BytesIO()
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
             # Aba resumo
             resumo_df = pd.DataFrame([{
                 "Funcionário": funcionario,
