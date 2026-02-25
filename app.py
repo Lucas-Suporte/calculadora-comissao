@@ -10,9 +10,9 @@ import os
 
 st.set_page_config(layout="wide")
 
-# =====================================
+# ================================
 # ESTILO VISUAL
-# =====================================
+# ================================
 st.markdown("""
 <style>
 .logo-center {
@@ -23,25 +23,25 @@ st.markdown("""
 }
 .title-center {
     text-align: center;
-    font-size: 34px;
+    font-size: 36px;
     font-weight: bold;
     margin-bottom: 30px;
 }
 .kpi {
     background: linear-gradient(135deg, #0B0F6D, #17B3A3);
     color: white;
-    padding: 35px;
-    border-radius: 20px;
+    padding: 40px;
+    border-radius: 22px;
     text-align: center;
-    box-shadow: 0 12px 30px rgba(0,0,0,0.25);
+    box-shadow: 0 14px 35px rgba(0,0,0,0.25);
     margin-bottom: 30px;
 }
 .card3d {
     background: linear-gradient(145deg, #ffffff, #e6e6e6);
-    padding: 18px;
-    border-radius: 18px;
-    box-shadow: 6px 6px 15px rgba(0,0,0,0.15),
-                -6px -6px 15px rgba(255,255,255,0.7);
+    padding: 20px;
+    border-radius: 20px;
+    box-shadow: 8px 8px 20px rgba(0,0,0,0.15),
+                -8px -8px 20px rgba(255,255,255,0.7);
     margin-bottom: 20px;
 }
 .progress-bar {
@@ -58,19 +58,19 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# =====================================
-# LOGO
-# =====================================
+# ================================
+# LOGO CENTRALIZADA
+# ================================
 if os.path.exists("logo.png"):
     st.markdown('<div class="logo-center">', unsafe_allow_html=True)
-    st.image("logo.png", width=320)
+    st.image("logo.png", width=350)
     st.markdown('</div>', unsafe_allow_html=True)
 
 st.markdown('<div class="title-center">📊 Calculadora de Comissão</div>', unsafe_allow_html=True)
 
-# =====================================
+# ================================
 # CAMPOS MANUAIS
-# =====================================
+# ================================
 col1, col2 = st.columns(2)
 
 with col1:
@@ -81,9 +81,9 @@ with col2:
 
 st.divider()
 
-# =====================================
+# ================================
 # CONFIG METAS
-# =====================================
+# ================================
 META_CONFIG = {
     "BANHO": {"meta_qtd": 150, "super_qtd": 200, "base_pct": 0.05, "meta_pct": 0.07, "super_pct": 0.10},
     "TOSA HIGIENICA": {"meta_qtd": 80, "super_qtd": 120, "base_pct": 0.05, "meta_pct": 0.07, "super_pct": 0.10},
@@ -92,102 +92,100 @@ META_CONFIG = {
     "TRATAMENTOS": {"meta_qtd": 40, "super_qtd": 70, "base_pct": 0.05, "meta_pct": 0.07, "super_pct": 0.10},
 }
 
-uploaded_file = st.file_uploader("Envie a planilha em CSV", type=["csv"])
+uploaded_file = st.file_uploader("Envie a planilha CSV no padrão servicos_25_02", type=["csv"])
 
-if uploaded_file:
+if uploaded_file and funcionario and mes_referencia:
 
     try:
         df = pd.read_csv(uploaded_file, sep=None, engine="python")
 
-        st.success("CSV carregado com sucesso!")
+        # Garantir colunas corretas
+        if "SERVICO" not in df.columns or "VALOR" not in df.columns:
+            st.error("CSV fora do padrão esperado (SERVICO / VALOR).")
+            st.stop()
 
-        st.subheader("Selecione as colunas corretas")
+        df["SERVICO"] = df["SERVICO"].astype(str).str.upper()
 
-        col_serv = st.selectbox("Coluna de Serviço", df.columns)
-        col_valor = st.selectbox("Coluna de Valor", df.columns)
+        resumo = []
+        total_comissao = 0
 
-        if funcionario and mes_referencia:
+        for categoria in META_CONFIG.keys():
 
-            df[col_serv] = df[col_serv].astype(str).str.upper()
+            filtro = df["SERVICO"].str.contains(categoria)
+            qtd = filtro.sum()
+            fat = df.loc[filtro, "VALOR"].sum()
 
-            resumo = []
-            total_comissao = 0
+            cfg = META_CONFIG[categoria]
 
-            for categoria in META_CONFIG.keys():
+            if qtd >= cfg["super_qtd"]:
+                pct = cfg["super_pct"]
+                nivel = "SUPER META"
+            elif qtd >= cfg["meta_qtd"]:
+                pct = cfg["meta_pct"]
+                nivel = "META"
+            else:
+                pct = cfg["base_pct"]
+                nivel = "BASE"
 
-                filtro = df[col_serv].str.contains(categoria)
-                qtd = filtro.sum()
-                fat = df.loc[filtro, col_valor].sum()
+            comissao = fat * pct
+            total_comissao += comissao
+            progresso = min((qtd / cfg["super_qtd"]) * 100, 100)
 
-                cfg = META_CONFIG[categoria]
+            resumo.append({
+                "categoria": categoria,
+                "qtd": qtd,
+                "fat": fat,
+                "pct": pct,
+                "comissao": comissao,
+                "nivel": nivel,
+                "progresso": progresso
+            })
 
-                if qtd >= cfg["super_qtd"]:
-                    pct = cfg["super_pct"]
-                    nivel = "SUPER META"
-                elif qtd >= cfg["meta_qtd"]:
-                    pct = cfg["meta_pct"]
-                    nivel = "META"
-                else:
-                    pct = cfg["base_pct"]
-                    nivel = "BASE"
+        # KPI PRINCIPAL
+        st.markdown(f"""
+        <div class="kpi">
+            <h2>{funcionario}</h2>
+            <h4>{mes_referencia}</h4>
+            <h1>R$ {total_comissao:,.2f}</h1>
+        </div>
+        """, unsafe_allow_html=True)
 
-                comissao = fat * pct
-                total_comissao += comissao
-                progresso = min((qtd / cfg["super_qtd"]) * 100, 100)
+        col_left, col_right = st.columns([1, 1.4])
 
-                resumo.append({
-                    "categoria": categoria,
-                    "qtd": qtd,
-                    "fat": fat,
-                    "pct": pct,
-                    "comissao": comissao,
-                    "nivel": nivel,
-                    "progresso": progresso
-                })
+        # INDICADORES
+        with col_left:
+            st.subheader("Indicadores de Comissão")
 
-            # KPI
-            st.markdown(f"""
-            <div class="kpi">
-                <h2>{funcionario}</h2>
-                <h4>{mes_referencia}</h4>
-                <h1>R$ {total_comissao:,.2f}</h1>
-            </div>
-            """, unsafe_allow_html=True)
+            for item in resumo:
+                st.markdown(f"""
+                <div class="card3d">
+                    <b>{item['categoria']}</b><br>
+                    {item['pct']*100:.0f}% aplicada<br>
+                    Comissão: <b>R$ {item['comissao']:,.2f}</b>
 
-            col_left, col_right = st.columns([1, 1.4])
-
-            with col_left:
-                st.subheader("Indicadores")
-
-                for item in resumo:
-                    st.markdown(f"""
-                    <div class="card3d">
-                        <b>{item['categoria']}</b><br>
-                        {item['pct']*100:.0f}% aplicada<br>
-                        Comissão: <b>R$ {item['comissao']:,.2f}</b>
-
-                        <div class="progress-bar">
-                            <div class="progress-fill" style="width:{item['progresso']}%;"></div>
-                        </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width:{item['progresso']}%;"></div>
                     </div>
-                    """, unsafe_allow_html=True)
+                </div>
+                """, unsafe_allow_html=True)
 
-            with col_right:
-                st.subheader("Resumo Financeiro")
+        # TABELA
+        with col_right:
+            st.subheader("Resumo Financeiro")
 
-                tabela_df = pd.DataFrame([
-                    [
-                        i["categoria"],
-                        i["qtd"],
-                        f"R$ {i['fat']:,.2f}",
-                        f"{i['pct']*100:.0f}%",
-                        f"R$ {i['comissao']:,.2f}",
-                        i["nivel"]
-                    ]
-                    for i in resumo
-                ], columns=["Categoria", "Qtd", "Faturamento", "% Comissão", "Comissão", "Nível"])
+            tabela_df = pd.DataFrame([
+                [
+                    i["categoria"],
+                    i["qtd"],
+                    f"R$ {i['fat']:,.2f}",
+                    f"{i['pct']*100:.0f}%",
+                    f"R$ {i['comissao']:,.2f}",
+                    i["nivel"]
+                ]
+                for i in resumo
+            ], columns=["Categoria", "Qtd", "Faturamento", "% Comissão", "Comissão", "Nível"])
 
-                st.dataframe(tabela_df, use_container_width=True)
+            st.dataframe(tabela_df, use_container_width=True)
 
     except Exception as e:
-        st.error(f"Erro ao ler o CSV: {e}")
+        st.error(f"Erro ao processar CSV: {e}")
