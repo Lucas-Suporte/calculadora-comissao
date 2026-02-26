@@ -1,6 +1,5 @@
 import streamlit as st
-import os
-from utils.auth import autenticar, cadastrar_usuario, carregar_usuarios
+from utils.auth import autenticar, cadastrar_usuario, carregar_usuarios, atualizar_usuario
 from utils.relatorio import gerar_pdf
 
 st.set_page_config(page_title="Calculadora de Comissão", layout="wide")
@@ -46,7 +45,7 @@ def tela_login():
                 st.error("Usuário já existe.")
 
 # ==============================
-# DASHBOARD PRINCIPAL
+# DASHBOARD
 # ==============================
 
 def dashboard():
@@ -54,6 +53,7 @@ def dashboard():
     usuario = st.session_state.usuario_logado
 
     with st.sidebar:
+        st.markdown("## Menu")
         st.write(f"Usuário: {usuario['email']}")
         if st.button("Logout"):
             st.session_state.usuario_logado = None
@@ -82,11 +82,33 @@ def dashboard():
 
         st.markdown(f"### {categoria}")
 
-        qtd = st.number_input(f"Quantidade - {categoria}", min_value=0, step=1, key=f"qtd_{categoria}")
-        meta = st.number_input(f"Meta - {categoria}", min_value=0, step=1, key=f"meta_{categoria}")
-        percentual = st.number_input(f"% Comissão - {categoria}", min_value=0.0, step=1.0, key=f"perc_{categoria}")
+        qtd = st.number_input(
+            f"Quantidade - {categoria}",
+            min_value=0,
+            step=1,
+            key=f"qtd_{categoria}"
+        )
 
-        valor_unitario = st.number_input(f"Valor Unitário - {categoria}", min_value=0.0, step=1.0, key=f"valor_{categoria}")
+        meta = st.number_input(
+            f"Meta - {categoria}",
+            min_value=0,
+            step=1,
+            key=f"meta_{categoria}"
+        )
+
+        percentual = st.number_input(
+            f"% Comissão - {categoria}",
+            min_value=0.0,
+            step=1.0,
+            key=f"perc_{categoria}"
+        )
+
+        valor_unitario = st.number_input(
+            f"Valor Unitário - {categoria}",
+            min_value=0.0,
+            step=1.0,
+            key=f"valor_{categoria}"
+        )
 
         comissao = qtd * valor_unitario * (percentual / 100)
         total_comissao += comissao
@@ -102,13 +124,12 @@ def dashboard():
         st.divider()
 
     st.subheader("Resumo")
-
     st.metric("Comissão Total", f"R$ {total_comissao:,.2f}")
 
     st.divider()
 
     # ==============================
-    # GERAR RELATÓRIO
+    # BOTÃO DE RELATÓRIO
     # ==============================
 
     if st.button("Gerar Relatório em PDF"):
