@@ -1,8 +1,43 @@
 import streamlit as st
+import base64
 from utils.auth import autenticar, cadastrar_usuario, listar_usuarios, atualizar_usuario
 from utils.relatorio import gerar_pdf
 
 st.set_page_config(page_title="Calculadora de Comissão", layout="wide")
+
+# ==============================
+# FUNÇÃO PARA CARREGAR IMAGEM BASE64
+# ==============================
+
+def get_base64_image(path):
+    with open(path, "rb") as img_file:
+        return base64.b64encode(img_file.read()).decode()
+
+# ==============================
+# APLICAR LOGO DE FUNDO
+# ==============================
+
+logo_fundo_base64 = get_base64_image("assets/logo_fundo.png")
+
+st.markdown(
+    f"""
+    <style>
+    .stApp {{
+        background-image: url("data:image/png;base64,{logo_fundo_base64}");
+        background-size: 40%;
+        background-repeat: no-repeat;
+        background-position: center;
+        background-attachment: fixed;
+        opacity: 0.98;
+    }}
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+# ==============================
+# CONTROLE DE SESSÃO
+# ==============================
 
 if "usuario_logado" not in st.session_state:
     st.session_state.usuario_logado = None
@@ -72,7 +107,7 @@ def area_admin():
 
 
 # ==============================
-# DASHBOARD COMISSÃO
+# DASHBOARD
 # ==============================
 
 def dashboard():
@@ -80,14 +115,18 @@ def dashboard():
     usuario = st.session_state.usuario_logado
 
     with st.sidebar:
-        st.markdown("## Menu")
+
+        # LOGO NO TOPO DO SIDEBAR
+        st.image("assets/logo_sidebar.png", use_container_width=True)
+
+        st.markdown("---")
         st.write(f"Usuário: {usuario['usuario']}")
         st.write(f"Tipo: {usuario['tipo']}")
 
-        menu = "Comissão"
-
         if usuario["tipo"] == "admin":
             menu = st.radio("Navegação", ["Comissão", "Administrador"])
+        else:
+            menu = "Comissão"
 
         if st.button("Logout"):
             st.session_state.usuario_logado = None
