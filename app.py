@@ -190,15 +190,18 @@ def dashboard():
 
                 if item["meta"] == "Super Meta":
                     progresso = 1.0
+                    medalha = "🥇 Super Meta"
                 elif item["meta"] == "Meta":
                     progresso = 0.7
+                    medalha = "🥈 Meta"
                 else:
                     progresso = 0.4
+                    medalha = "🥉 Base"
 
                 st.markdown(f"### {item['categoria']}")
                 st.progress(progresso)
                 st.metric(
-                    f"{item['meta']} ({item['percentual']}%)",
+                    medalha,
                     f"R$ {item['comissao']:,.2f}"
                 )
                 st.divider()
