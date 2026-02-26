@@ -56,7 +56,6 @@ def calcular_comissao(df):
     if "SERVICO" not in df.columns or "VALOR" not in df.columns:
         raise ValueError("O CSV precisa conter as colunas SERVICO e VALOR.")
 
-    # Limpeza de valores
     df["VALOR"] = (
         df["VALOR"]
         .astype(str)
@@ -67,41 +66,29 @@ def calcular_comissao(df):
 
     df["VALOR"] = pd.to_numeric(df["VALOR"], errors="coerce").fillna(0)
 
-    # Inicialização
     resultados = []
     total_comissao = 0
     total_faturamento = 0
 
-    # Contadores por categoria
     categoria_data = {
         categoria: {"qtd": 0, "faturamento": 0}
         for categoria in META_CONFIG.keys()
     }
-
-    # ==============================
-    # PROCESSAMENTO LINHA A LINHA
-    # ==============================
 
     for _, row in df.iterrows():
 
         servico = row["SERVICO"]
         valor = row["VALOR"]
 
-        # BANHO + TOSA HIGIÊNICA
         if servico == "Banho + Tosa Higiênica":
             categoria_data["Banho"]["qtd"] += 1
             categoria_data["Banho"]["faturamento"] += valor
-
             categoria_data["Tosa Higiênica"]["qtd"] += 1
-            # valor NÃO entra para tosa
 
-        # BANHO + HIDRATAÇÃO
         elif servico == "Banho + Hidratação":
             categoria_data["Banho"]["qtd"] += 1
             categoria_data["Banho"]["faturamento"] += valor
-
             categoria_data["Tratamentos"]["qtd"] += 1
-            # valor NÃO entra para tratamento
 
         else:
             for categoria, servicos in SERVICE_MAP.items():
@@ -109,10 +96,6 @@ def calcular_comissao(df):
                     categoria_data[categoria]["qtd"] += 1
                     categoria_data[categoria]["faturamento"] += valor
                     break
-
-    # ==============================
-    # CÁLCULO DAS METAS
-    # ==============================
 
     for categoria, metas in META_CONFIG.items():
 
