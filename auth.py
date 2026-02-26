@@ -1,44 +1,57 @@
-import streamlit as st
-import bcrypt
-from database import conectar
+import json
+import os
 
-def hash_senha(senha):
-    return bcrypt.hashpw(senha.encode(), bcrypt.gensalt())
+CAMINHO_USUARIOS = "data/usuarios.json"
 
-def verificar_senha(senha_digitada, senha_hash):
-    return bcrypt.checkpw(senha_digitada.encode(), senha_hash)
 
-def cadastrar_usuario(nome, email, senha, perfil="funcionario"):
-    conn = conectar()
-    cursor = conn.cursor()
+def carregar_usuarios():
+    if not os.path.exists(CAMINHO_USUARIOS):
+        return {}
+    with open(CAMINHO_USUARIOS, "r") as f:
+        return json.load(f)
 
-    senha_hash = hash_senha(senha)
 
-    try:
-        cursor.execute(
-            "INSERT INTO usuarios (nome, email, senha, perfil) VALUES (?, ?, ?, ?)",
-            (nome, email, senha_hash, perfil)
-        )
-        conn.commit()
-    except:
-        pass
+def salvar_usuarios(usuarios):
+    with open(CAMINHO_USUARIOS, "w") as f:
+        json.dump(usuarios, f, indent=4)
 
-    conn.close()
 
-def login(email, senha):
-    conn = conectar()
-    cursor = conn.cursor()
+def autenticar(email, senha):
+    usuarios = carregar_usuarios()
+    if email in usuarios and usuarios[email]["senha"] == senha:
+        return True, usuarios[email]["tipo"]
+    return False, None
 
-    cursor.execute("SELECT id, nome, senha, perfil FROM usuarios WHERE email = ?", (email,))
-    usuario = cursor.fetchone()
-    conn.close()
 
-    if usuario:
-        if verificar_senha(senha, usuario[2]):
-            return {
-                "id": usuario[0],
-                "nome": usuario[1],
-                "perfil": usuario[3]
-            }
+def cadastrar_usuario(email, senha, tipo="user"):
+    usuarios = carregar_usuarios()
 
-    return None
+    if email in usuarios:
+        return False, "Usuário já existe."
+
+    usuarios[email] = {
+        "senha": senha,
+        "tipo": tipo
+    }
+
+    salvar_usuarios(usuarios)
+    return True, "Usuário criado com sucesso."
+
+
+def atualizar_usuario(email, nova_senha=None, novo_email=None):
+    usuarios = carregar_usuarios()
+
+    if email not in usuarios:
+        return False, "Usuário não encontrado."
+
+    dados = usuarios[email]
+
+    if nova_senha:
+        dados["senha"] = nova_senha
+
+    if novo_email:
+        usuarios[novo_email] = dados
+        del usuarios[email]
+
+    salvar_usuarios(usuarios)
+    return True, "Usuário atualizado com sucesso."
