@@ -2,7 +2,68 @@ import streamlit as st
 import pandas as pd
 from utils.comissao import calcular_comissao
 
-st.set_page_config(page_title="Relatório de Comissão", layout="wide")
+# ==========================================
+# CONFIGURAÇÃO DA PÁGINA
+# ==========================================
+
+st.set_page_config(
+    page_title="Sistema de Comissão",
+    layout="wide"
+)
+
+# ==========================================
+# CONTROLE DE LOGIN
+# ==========================================
+
+USUARIOS = {
+    "admin": "1234",
+    "gerente": "pet247"
+}
+
+if "logado" not in st.session_state:
+    st.session_state.logado = False
+
+if "usuario" not in st.session_state:
+    st.session_state.usuario = ""
+
+def login():
+    st.title("Acesso ao Sistema")
+
+    usuario = st.text_input("Usuário")
+    senha = st.text_input("Senha", type="password")
+
+    if st.button("Entrar"):
+        if usuario in USUARIOS and USUARIOS[usuario] == senha:
+            st.session_state.logado = True
+            st.session_state.usuario = usuario
+            st.rerun()
+        else:
+            st.error("Usuário ou senha inválidos")
+
+if not st.session_state.logado:
+    login()
+    st.stop()
+
+# ==========================================
+# SIDEBAR
+# ==========================================
+
+with st.sidebar:
+
+    st.image("assets/logo.png", use_container_width=True)
+
+    st.markdown("---")
+    st.markdown(f"**Usuário:** {st.session_state.usuario}")
+    st.markdown("---")
+
+    if st.button("Sair"):
+        st.session_state.logado = False
+        st.session_state.usuario = ""
+        st.rerun()
+
+# ==========================================
+# ESTILO VISUAL
+# ==========================================
 
 st.markdown("""
 <style>
@@ -43,6 +104,10 @@ body {
 }
 </style>
 """, unsafe_allow_html=True)
+
+# ==========================================
+# DASHBOARD PRINCIPAL
+# ==========================================
 
 st.markdown('<div class="main-title">Relatório de Comissão</div>', unsafe_allow_html=True)
 
