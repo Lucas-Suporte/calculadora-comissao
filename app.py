@@ -1,39 +1,18 @@
 import streamlit as st
 import base64
+import os
 from utils.auth import autenticar, cadastrar_usuario, listar_usuarios, atualizar_usuario
 from utils.relatorio import gerar_pdf
 
 st.set_page_config(page_title="Calculadora de Comissão", layout="wide")
 
 # ==============================
-# FUNÇÃO PARA CARREGAR IMAGEM BASE64
+# FUNÇÃO BASE64
 # ==============================
 
 def get_base64_image(path):
     with open(path, "rb") as img_file:
         return base64.b64encode(img_file.read()).decode()
-
-# ==============================
-# APLICAR LOGO DE FUNDO
-# ==============================
-
-logo_fundo_base64 = get_base64_image("assets/logo_fundo.png")
-
-st.markdown(
-    f"""
-    <style>
-    .stApp {{
-        background-image: url("data:image/png;base64,{logo_fundo_base64}");
-        background-size: 40%;
-        background-repeat: no-repeat;
-        background-position: center;
-        background-attachment: fixed;
-        opacity: 0.98;
-    }}
-    </style>
-    """,
-    unsafe_allow_html=True
-)
 
 # ==============================
 # CONTROLE DE SESSÃO
@@ -114,10 +93,48 @@ def dashboard():
 
     usuario = st.session_state.usuario_logado
 
+    # ==============================
+    # LOGO DE FUNDO (50% OPACIDADE)
+    # Só aparece após login
+    # ==============================
+
+    if os.path.exists("assets/logo_fundo.png"):
+        logo_fundo_base64 = get_base64_image("assets/logo_fundo.png")
+
+        st.markdown(
+            f"""
+            <style>
+            .stApp {{
+                position: relative;
+            }}
+
+            .stApp::before {{
+                content: "";
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background-image: url("data:image/png;base64,{logo_fundo_base64}");
+                background-size: 40%;
+                background-repeat: no-repeat;
+                background-position: center;
+                opacity: 0.5;
+                z-index: -1;
+            }}
+            </style>
+            """,
+            unsafe_allow_html=True
+        )
+
+    # ==============================
+    # SIDEBAR
+    # ==============================
+
     with st.sidebar:
 
-        # LOGO NO TOPO DO SIDEBAR
-        st.image("assets/logo_sidebar.png", use_container_width=True)
+        if os.path.exists("assets/logo_sidebar.png"):
+            st.image("assets/logo_sidebar.png", use_container_width=True)
 
         st.markdown("---")
         st.write(f"Usuário: {usuario['usuario']}")
