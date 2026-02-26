@@ -21,7 +21,7 @@ def tela_login():
     opcao = st.radio("Escolha uma opção:", ["Login", "Primeiro Acesso"])
 
     if opcao == "Login":
-        email = st.text_input("Email")
+        email = st.text_input("Usuário")
         senha = st.text_input("Senha", type="password")
 
         if st.button("Entrar"):
@@ -34,7 +34,7 @@ def tela_login():
 
     else:
         st.subheader("Criar Primeiro Acesso")
-        novo_email = st.text_input("Novo Email")
+        novo_email = st.text_input("Novo Usuário")
         nova_senha = st.text_input("Nova Senha", type="password")
 
         if st.button("Cadastrar"):
@@ -52,9 +52,15 @@ def dashboard():
 
     usuario = st.session_state.usuario_logado
 
+    # Correção automática se sessão antiga estiver como string
+    if isinstance(usuario, str):
+        usuario = {"email": usuario}
+        st.session_state.usuario_logado = usuario
+
     with st.sidebar:
         st.markdown("## Menu")
         st.write(f"Usuário: {usuario['email']}")
+
         if st.button("Logout"):
             st.session_state.usuario_logado = None
             st.rerun()
@@ -129,7 +135,7 @@ def dashboard():
     st.divider()
 
     # ==============================
-    # BOTÃO DE RELATÓRIO
+    # BOTÃO GERAR RELATÓRIO
     # ==============================
 
     if st.button("Gerar Relatório em PDF"):
