@@ -1,57 +1,81 @@
 import json
 import os
 
-CAMINHO_USUARIOS = "data/usuarios.json"
+ARQUIVO_USUARIOS = "usuarios.json"
 
+
+# ==============================
+# BASE DE DADOS
+# ==============================
 
 def carregar_usuarios():
-    if not os.path.exists(CAMINHO_USUARIOS):
-        return {}
-    with open(CAMINHO_USUARIOS, "r") as f:
+    if not os.path.exists(ARQUIVO_USUARIOS):
+        with open(ARQUIVO_USUARIOS, "w") as f:
+            json.dump({}, f)
+
+    with open(ARQUIVO_USUARIOS, "r") as f:
         return json.load(f)
 
 
 def salvar_usuarios(usuarios):
-    with open(CAMINHO_USUARIOS, "w") as f:
+    with open(ARQUIVO_USUARIOS, "w") as f:
         json.dump(usuarios, f, indent=4)
 
 
-def autenticar(email, senha):
-    usuarios = carregar_usuarios()
-    if email in usuarios and usuarios[email]["senha"] == senha:
-        return True, usuarios[email]["tipo"]
-    return False, None
+# ==============================
+# AUTENTICAÇÃO
+# ==============================
 
-
-def cadastrar_usuario(email, senha, tipo="user"):
+def autenticar(usuario, senha):
     usuarios = carregar_usuarios()
 
-    if email in usuarios:
-        return False, "Usuário já existe."
+    if usuario in usuarios:
+        if usuarios[usuario]["senha"] == senha:
+            return {
+                "usuario": usuario,
+                "tipo": usuarios[usuario].get("tipo", "usuario")
+            }
 
-    usuarios[email] = {
+    return None
+
+
+# ==============================
+# CADASTRO
+# ==============================
+
+def cadastrar_usuario(usuario, senha, tipo="usuario"):
+    usuarios = carregar_usuarios()
+
+    if usuario in usuarios:
+        return False
+
+    usuarios[usuario] = {
         "senha": senha,
         "tipo": tipo
     }
 
     salvar_usuarios(usuarios)
-    return True, "Usuário criado com sucesso."
+    return True
 
 
-def atualizar_usuario(email, nova_senha=None, novo_email=None):
+# ==============================
+# ATUALIZAÇÃO DE SENHA
+# ==============================
+
+def atualizar_usuario(usuario, nova_senha):
     usuarios = carregar_usuarios()
 
-    if email not in usuarios:
-        return False, "Usuário não encontrado."
+    if usuario in usuarios:
+        usuarios[usuario]["senha"] = nova_senha
+        salvar_usuarios(usuarios)
+        return True
 
-    dados = usuarios[email]
+    return False
 
-    if nova_senha:
-        dados["senha"] = nova_senha
 
-    if novo_email:
-        usuarios[novo_email] = dados
-        del usuarios[email]
+# ==============================
+# LISTAGEM (para admin)
+# ==============================
 
-    salvar_usuarios(usuarios)
-    return True, "Usuário atualizado com sucesso."
+def listar_usuarios():
+    return carregar_usuarios()
