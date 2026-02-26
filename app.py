@@ -1,18 +1,15 @@
 import streamlit as st
-from utils.auth import autenticar, cadastrar_usuario, carregar_usuarios, atualizar_usuario
+from utils.auth import autenticar, cadastrar_usuario, listar_usuarios, atualizar_usuario
 from utils.relatorio import gerar_pdf
 
 st.set_page_config(page_title="Calculadora de Comissão", layout="wide")
 
-# ==============================
-# CONTROLE DE SESSÃO
-# ==============================
-
 if "usuario_logado" not in st.session_state:
     st.session_state.usuario_logado = None
 
+
 # ==============================
-# TELA DE LOGIN
+# LOGIN
 # ==============================
 
 def tela_login():
@@ -21,49 +18,88 @@ def tela_login():
     opcao = st.radio("Escolha uma opção:", ["Login", "Primeiro Acesso"])
 
     if opcao == "Login":
-        email = st.text_input("Usuário")
+        usuario = st.text_input("Usuário")
         senha = st.text_input("Senha", type="password")
 
         if st.button("Entrar"):
-            usuario = autenticar(email, senha)
-            if usuario:
-                st.session_state.usuario_logado = usuario
+            dados = autenticar(usuario, senha)
+            if dados:
+                st.session_state.usuario_logado = dados
                 st.rerun()
             else:
-                st.error("Login inválido.")
+                st.error("Credenciais inválidas.")
 
     else:
-        st.subheader("Criar Primeiro Acesso")
-        novo_email = st.text_input("Novo Usuário")
+        novo_usuario = st.text_input("Novo Usuário")
         nova_senha = st.text_input("Nova Senha", type="password")
 
         if st.button("Cadastrar"):
-            sucesso = cadastrar_usuario(novo_email, nova_senha)
+            sucesso = cadastrar_usuario(novo_usuario, nova_senha)
             if sucesso:
-                st.success("Usuário cadastrado com sucesso.")
+                st.success("Usuário criado com sucesso.")
             else:
                 st.error("Usuário já existe.")
 
+
 # ==============================
-# DASHBOARD
+# ÁREA ADMIN
+# ==============================
+
+def area_admin():
+    st.subheader("Gerenciar Usuários")
+
+    usuarios = listar_usuarios()
+
+    for user, dados in usuarios.items():
+        st.markdown(f"### {user}")
+        st.write(f"Tipo: {dados['tipo']}")
+
+        nova_senha = st.text_input(f"Nova senha para {user}", key=f"senha_{user}")
+
+        novo_tipo = st.selectbox(
+            f"Tipo de usuário {user}",
+            ["usuario", "admin"],
+            index=0 if dados["tipo"] == "usuario" else 1,
+            key=f"tipo_{user}"
+        )
+
+        if st.button(f"Atualizar {user}"):
+            atualizar_usuario(user, nova_senha, novo_tipo)
+            st.success("Atualizado com sucesso.")
+            st.rerun()
+
+        st.divider()
+
+
+# ==============================
+# DASHBOARD COMISSÃO
 # ==============================
 
 def dashboard():
 
     usuario = st.session_state.usuario_logado
 
-    # Correção automática se sessão antiga estiver como string
-    if isinstance(usuario, str):
-        usuario = {"email": usuario}
-        st.session_state.usuario_logado = usuario
-
     with st.sidebar:
         st.markdown("## Menu")
-        st.write(f"Usuário: {usuario['email']}")
+        st.write(f"Usuário: {usuario['usuario']}")
+        st.write(f"Tipo: {usuario['tipo']}")
+
+        menu = "Comissão"
+
+        if usuario["tipo"] == "admin":
+            menu = st.radio("Navegação", ["Comissão", "Administrador"])
 
         if st.button("Logout"):
             st.session_state.usuario_logado = None
             st.rerun()
+
+    if usuario["tipo"] == "admin" and menu == "Administrador":
+        area_admin()
+        return
+
+    # ==============================
+    # ÁREA COMISSÃO
+    # ==============================
 
     st.title("Calculadora de Comissão")
 
@@ -72,49 +108,18 @@ def dashboard():
 
     st.divider()
 
-    st.subheader("Serviços Realizados")
-
-    categorias = [
-        "Banho",
-        "Tosa",
-        "Hidratação",
-        "Taxa Higiênica"
-    ]
+    categorias = ["Banho", "Tosa", "Hidratação", "Taxa Higiênica"]
 
     resultados = []
     total_comissao = 0
 
     for categoria in categorias:
-
         st.markdown(f"### {categoria}")
 
-        qtd = st.number_input(
-            f"Quantidade - {categoria}",
-            min_value=0,
-            step=1,
-            key=f"qtd_{categoria}"
-        )
-
-        meta = st.number_input(
-            f"Meta - {categoria}",
-            min_value=0,
-            step=1,
-            key=f"meta_{categoria}"
-        )
-
-        percentual = st.number_input(
-            f"% Comissão - {categoria}",
-            min_value=0.0,
-            step=1.0,
-            key=f"perc_{categoria}"
-        )
-
-        valor_unitario = st.number_input(
-            f"Valor Unitário - {categoria}",
-            min_value=0.0,
-            step=1.0,
-            key=f"valor_{categoria}"
-        )
+        qtd = st.number_input(f"Quantidade - {categoria}", min_value=0, step=1, key=f"qtd_{categoria}")
+        meta = st.number_input(f"Meta - {categoria}", min_value=0, step=1, key=f"meta_{categoria}")
+        percentual = st.number_input(f"% Comissão - {categoria}", min_value=0.0, step=1.0, key=f"perc_{categoria}")
+        valor_unitario = st.number_input(f"Valor Unitário - {categoria}", min_value=0.0, step=1.0, key=f"valor_{categoria}")
 
         comissao = qtd * valor_unitario * (percentual / 100)
         total_comissao += comissao
@@ -129,17 +134,9 @@ def dashboard():
 
         st.divider()
 
-    st.subheader("Resumo")
     st.metric("Comissão Total", f"R$ {total_comissao:,.2f}")
 
-    st.divider()
-
-    # ==============================
-    # BOTÃO GERAR RELATÓRIO
-    # ==============================
-
     if st.button("Gerar Relatório em PDF"):
-
         caminho_pdf = gerar_pdf(nome, mes, resultados, total_comissao)
 
         with open(caminho_pdf, "rb") as f:
@@ -149,6 +146,7 @@ def dashboard():
                 file_name=f"relatorio_{nome}_{mes}.pdf",
                 mime="application/pdf"
             )
+
 
 # ==============================
 # CONTROLE PRINCIPAL
