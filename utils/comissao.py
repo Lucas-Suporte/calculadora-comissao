@@ -1,32 +1,65 @@
 import pandas as pd
 
+# ==============================
+# CONFIGURAÇÃO DE METAS
+# ==============================
+
 META_CONFIG = {
-    "BANHO": {"base": 3, "meta": 4, "super": 5},
-    "TOSA HIGIENICA": {"base": 10, "meta": 15, "super": 20},
-    "TOSA MAQUINA": {"base": 10, "meta": 15, "super": 20},
-    "TOSA TESOURA": {"base": 15, "meta": 20, "super": 25},
-    "TRATAMENTOS": {"base": 15, "meta": 20, "super": 25},
+    "Banho": {"base": 3, "meta": 4, "super": 5},
+    "Tosa Higiênica": {"base": 10, "meta": 15, "super": 20},
+    "Tosa à Máquina": {"base": 10, "meta": 15, "super": 20},
+    "Tosa à Tesoura": {"base": 15, "meta": 20, "super": 25},
+    "Tratamentos": {"base": 15, "meta": 20, "super": 25},
 }
+
+# ==============================
+# MAPEAMENTO DE SERVIÇOS
+# ==============================
 
 SERVICE_MAP = {
-    "BANHO": ["Banho", "Banho + Hidratação", "Banho + Tosa Higiênica"],
-    "TOSA HIGIENICA": ["Tosa Higiênica", "Tosa de Acabamento"],
-    "TOSA MAQUINA": ["Tosa à Máquina", "Tosa à Máquina (sb)"],
-    "TOSA TESOURA": ["Tosa à Tesoura", "Tosa à Tesoura (sb)", "Tosa à Tesoura Gato"],
-    "TRATAMENTOS": [
-        "Hidratação", "Remoção de Subpelos", "Higiene Bucal",
-        "Corte de Unhas", "Desembaraço Leve (30min)",
-        "Desembaraço Médio (1h)", "Desembaraço Pesado (2h)",
-        "Corte de Unhas Gato"
-    ]
+    "Banho": [
+        "Banho",
+        "Banho + Tosa Higiênica",
+        "Banho + Hidratação",
+    ],
+    "Tosa Higiênica": [
+        "Tosa Higiênica",
+        "Banho + Tosa Higiênica",
+    ],
+    "Tosa à Máquina": [
+        "Tosa à Máquina",
+        "Tosa à Máquina (sb)",
+    ],
+    "Tosa à Tesoura": [
+        "Tosa à Tesoura",
+        "Tosa à Tesoura (sb)",
+        "Tosa à Tesoura Gato",
+    ],
+    "Tratamentos": [
+        "Hidratação",
+        "Banho + Hidratação",
+        "Remoção de Subpelos",
+        "Desembaraço Leve (30min)",
+        "Desembaraço Médio (1h)",
+        "Desembaraço Pesado (2h)",
+        "Corte de Unhas",
+        "Corte de Unhas Gato",
+    ],
 }
 
+# ==============================
+# FUNÇÃO PRINCIPAL
+# ==============================
+
 def calcular_comissao(df):
-    if "VALOR" not in df.columns or "SERVICO" not in df.columns:
+
+    if "SERVICO" not in df.columns or "VALOR" not in df.columns:
         raise ValueError("O CSV precisa conter as colunas SERVICO e VALOR.")
 
+    # Limpeza de valores
     df["VALOR"] = (
-        df["VALOR"].astype(str)
+        df["VALOR"]
+        .astype(str)
         .str.replace("R$", "", regex=False)
         .str.replace(".", "", regex=False)
         .str.replace(",", ".", regex=False)
@@ -34,36 +67,80 @@ def calcular_comissao(df):
 
     df["VALOR"] = pd.to_numeric(df["VALOR"], errors="coerce").fillna(0)
 
+    # Inicialização
     resultados = []
     total_comissao = 0
     total_faturamento = 0
 
+    # Contadores por categoria
+    categoria_data = {
+        categoria: {"qtd": 0, "faturamento": 0}
+        for categoria in META_CONFIG.keys()
+    }
+
+    # ==============================
+    # PROCESSAMENTO LINHA A LINHA
+    # ==============================
+
+    for _, row in df.iterrows():
+
+        servico = row["SERVICO"]
+        valor = row["VALOR"]
+
+        # BANHO + TOSA HIGIÊNICA
+        if servico == "Banho + Tosa Higiênica":
+            categoria_data["Banho"]["qtd"] += 1
+            categoria_data["Banho"]["faturamento"] += valor
+
+            categoria_data["Tosa Higiênica"]["qtd"] += 1
+            # valor NÃO entra para tosa
+
+        # BANHO + HIDRATAÇÃO
+        elif servico == "Banho + Hidratação":
+            categoria_data["Banho"]["qtd"] += 1
+            categoria_data["Banho"]["faturamento"] += valor
+
+            categoria_data["Tratamentos"]["qtd"] += 1
+            # valor NÃO entra para tratamento
+
+        else:
+            for categoria, servicos in SERVICE_MAP.items():
+                if servico in servicos:
+                    categoria_data[categoria]["qtd"] += 1
+                    categoria_data[categoria]["faturamento"] += valor
+                    break
+
+    # ==============================
+    # CÁLCULO DAS METAS
+    # ==============================
+
     for categoria, metas in META_CONFIG.items():
-        filtro = df["SERVICO"].isin(SERVICE_MAP[categoria])
-        qtd = filtro.sum()
-        faturamento = df.loc[filtro, "VALOR"].sum()
-        total_faturamento += faturamento
+
+        qtd = categoria_data[categoria]["qtd"]
+        faturamento = categoria_data[categoria]["faturamento"]
 
         if qtd >= metas["super"]:
             percentual = metas["super"]
-            meta_nome = "Super Meta"
+            nome_meta = "Super Meta"
         elif qtd >= metas["meta"]:
             percentual = metas["meta"]
-            meta_nome = "Meta"
+            nome_meta = "Meta"
         else:
             percentual = metas["base"]
-            meta_nome = "Base"
+            nome_meta = "Base"
 
         comissao = faturamento * (percentual / 100)
+
         total_comissao += comissao
+        total_faturamento += faturamento
 
         resultados.append({
             "categoria": categoria,
-            "qtd": int(qtd),
-            "meta": meta_nome,
+            "qtd": qtd,
+            "meta": nome_meta,
             "percentual": percentual,
             "faturamento": faturamento,
-            "comissao": comissao
+            "comissao": comissao,
         })
 
     return resultados, total_comissao, total_faturamento
