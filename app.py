@@ -1,151 +1,133 @@
-import sys
-import os
-
-# 🔧 GARANTE QUE O STREAMLIT ENXERGUE A RAIZ
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
 import streamlit as st
-import pandas as pd
-from utils.comissao import calcular_comissao
-from utils.auth import autenticar, cadastrar_usuario, carregar_usuarios, atualizar_usuario
+import os
+from utils.auth import autenticar, cadastrar_usuario, carregar_usuarios
+from utils.relatorio import gerar_pdf
 
-st.set_page_config(page_title="Sistema de Comissão", layout="wide")
+st.set_page_config(page_title="Calculadora de Comissão", layout="wide")
 
 # ==============================
 # CONTROLE DE SESSÃO
 # ==============================
 
-if "logado" not in st.session_state:
-    st.session_state.logado = False
-
-if "usuario" not in st.session_state:
-    st.session_state.usuario = ""
-
-if "tipo" not in st.session_state:
-    st.session_state.tipo = ""
+if "usuario_logado" not in st.session_state:
+    st.session_state.usuario_logado = None
 
 # ==============================
-# TELA DE LOGIN / CADASTRO
+# TELA DE LOGIN
 # ==============================
 
 def tela_login():
+    st.title("Sistema de Comissão")
 
-    st.title("Sistema de Comissão PET247")
+    opcao = st.radio("Escolha uma opção:", ["Login", "Primeiro Acesso"])
 
-    aba = st.radio("Escolha uma opção:", ["Login", "Primeiro Acesso"])
-
-    if aba == "Login":
-
-        email = st.text_input("E-mail")
+    if opcao == "Login":
+        email = st.text_input("Email")
         senha = st.text_input("Senha", type="password")
 
         if st.button("Entrar"):
-            ok, tipo = autenticar(email, senha)
-            if ok:
-                st.session_state.logado = True
-                st.session_state.usuario = email
-                st.session_state.tipo = tipo
+            usuario = autenticar(email, senha)
+            if usuario:
+                st.session_state.usuario_logado = usuario
                 st.rerun()
             else:
-                st.error("E-mail ou senha inválidos.")
+                st.error("Login inválido.")
 
-    if aba == "Primeiro Acesso":
-
-        novo_email = st.text_input("Novo E-mail")
+    else:
+        st.subheader("Criar Primeiro Acesso")
+        novo_email = st.text_input("Novo Email")
         nova_senha = st.text_input("Nova Senha", type="password")
 
-        if st.button("Criar Conta"):
-            ok, msg = cadastrar_usuario(novo_email, nova_senha)
-            if ok:
-                st.success(msg)
+        if st.button("Cadastrar"):
+            sucesso = cadastrar_usuario(novo_email, nova_senha)
+            if sucesso:
+                st.success("Usuário cadastrado com sucesso.")
             else:
-                st.error(msg)
-
-# Se não estiver logado, para aqui
-if not st.session_state.logado:
-    tela_login()
-    st.stop()
+                st.error("Usuário já existe.")
 
 # ==============================
-# SIDEBAR
+# DASHBOARD PRINCIPAL
 # ==============================
 
-with st.sidebar:
+def dashboard():
 
-    st.image("assets/logo.png", use_container_width=True)
-    st.markdown("---")
-    st.markdown(f"**Usuário:** {st.session_state.usuario}")
-    st.markdown(f"**Perfil:** {st.session_state.tipo}")
-    st.markdown("---")
+    usuario = st.session_state.usuario_logado
 
-    if st.button("Sair"):
-        st.session_state.logado = False
-        st.session_state.usuario = ""
-        st.session_state.tipo = ""
-        st.rerun()
+    with st.sidebar:
+        st.write(f"Usuário: {usuario['email']}")
+        if st.button("Logout"):
+            st.session_state.usuario_logado = None
+            st.rerun()
 
-# ==============================
-# PAINEL ADMINISTRATIVO
-# ==============================
+    st.title("Calculadora de Comissão")
 
-if st.session_state.tipo == "admin":
-
-    st.header("Painel Administrativo")
-
-    usuarios = carregar_usuarios()
-
-    for email in usuarios:
-
-        with st.expander(f"Usuário: {email}"):
-
-            st.write("Tipo:", usuarios[email]["tipo"])
-
-            nova_senha = st.text_input(
-                f"Nova senha para {email}",
-                type="password",
-                key=f"senha_{email}"
-            )
-
-            if st.button(f"Atualizar {email}", key=f"btn_{email}"):
-                ok, msg = atualizar_usuario(email, nova_senha)
-                if ok:
-                    st.success(msg)
-                else:
-                    st.error(msg)
+    nome = st.text_input("Nome do Funcionário")
+    mes = st.text_input("Mês de Referência")
 
     st.divider()
 
-# ==============================
-# DASHBOARD COMISSÃO
-# ==============================
+    st.subheader("Serviços Realizados")
 
-st.title("Relatório de Comissão")
+    categorias = [
+        "Banho",
+        "Tosa",
+        "Hidratação",
+        "Taxa Higiênica"
+    ]
 
-nome = st.text_input("Nome do Funcionário")
-mes = st.text_input("Mês de Referência")
-arquivo = st.file_uploader("Envie a planilha CSV", type="csv")
+    resultados = []
+    total_comissao = 0
 
-if arquivo:
+    for categoria in categorias:
 
-    try:
-        df = pd.read_csv(arquivo, sep=None, engine="python")
-        resultados, total_comissao, total_faturamento = calcular_comissao(df)
+        st.markdown(f"### {categoria}")
 
-        st.subheader("Resumo Geral")
+        qtd = st.number_input(f"Quantidade - {categoria}", min_value=0, step=1, key=f"qtd_{categoria}")
+        meta = st.number_input(f"Meta - {categoria}", min_value=0, step=1, key=f"meta_{categoria}")
+        percentual = st.number_input(f"% Comissão - {categoria}", min_value=0.0, step=1.0, key=f"perc_{categoria}")
 
-        st.write("Faturamento Total:", f"R$ {total_faturamento:,.2f}")
-        st.write("Comissão Final:", f"R$ {total_comissao:,.2f}")
+        valor_unitario = st.number_input(f"Valor Unitário - {categoria}", min_value=0.0, step=1.0, key=f"valor_{categoria}")
 
-        st.subheader("Detalhamento por Categoria")
+        comissao = qtd * valor_unitario * (percentual / 100)
+        total_comissao += comissao
 
-        for r in resultados:
-            st.write(
-                r["categoria"],
-                "| Qtde:", r["qtd"],
-                "| Meta:", r["meta"],
-                f"({r['percentual']}%)",
-                "| Comissão:", f"R$ {r['comissao']:,.2f}"
+        resultados.append({
+            "categoria": categoria,
+            "qtd": qtd,
+            "meta": meta,
+            "percentual": percentual,
+            "comissao": comissao
+        })
+
+        st.divider()
+
+    st.subheader("Resumo")
+
+    st.metric("Comissão Total", f"R$ {total_comissao:,.2f}")
+
+    st.divider()
+
+    # ==============================
+    # GERAR RELATÓRIO
+    # ==============================
+
+    if st.button("Gerar Relatório em PDF"):
+
+        caminho_pdf = gerar_pdf(nome, mes, resultados, total_comissao)
+
+        with open(caminho_pdf, "rb") as f:
+            st.download_button(
+                label="Baixar Relatório",
+                data=f,
+                file_name=f"relatorio_{nome}_{mes}.pdf",
+                mime="application/pdf"
             )
 
-    except Exception as e:
-        st.error(f"Erro ao processar CSV: {e}")
+# ==============================
+# CONTROLE PRINCIPAL
+# ==============================
+
+if st.session_state.usuario_logado:
+    dashboard()
+else:
+    tela_login()
