@@ -1,4 +1,5 @@
 import streamlit as st
+import pandas as pd
 import json
 import os
 from utils.relatorio import gerar_pdf
@@ -8,7 +9,7 @@ st.set_page_config(page_title="Sistema de Comissão", layout="wide")
 ARQUIVO_USUARIOS = "usuarios.json"
 
 # =========================
-# GARANTE ADMIN FIXO
+# ADMIN FIXO
 # =========================
 
 def inicializar_admin():
@@ -57,10 +58,11 @@ def cadastrar_usuario(usuario, senha):
     return True
 
 def excluir_usuario(usuario):
+    if usuario == "pet247market":
+        return
     usuarios = carregar_usuarios()
-    if usuario != "pet247market":
-        usuarios.pop(usuario)
-        salvar_usuarios(usuarios)
+    usuarios.pop(usuario)
+    salvar_usuarios(usuarios)
 
 # =========================
 # SESSÃO
@@ -110,6 +112,7 @@ def area_admin():
     usuarios = carregar_usuarios()
 
     for user, dados in usuarios.items():
+
         st.subheader(user)
 
         col1, col2, col3 = st.columns(3)
@@ -139,7 +142,7 @@ def area_admin():
         st.divider()
 
 # =========================
-# DASHBOARD
+# DASHBOARD CSV
 # =========================
 
 def dashboard():
@@ -163,64 +166,65 @@ def dashboard():
         area_admin()
         return
 
-    st.title("Dashboard de Comissão")
+    st.title("Dashboard Automático de Comissão")
 
     nome = st.text_input("Nome do Funcionário")
     mes = st.text_input("Mês de Referência")
 
-    categorias = {
-        "Banho": 0,
-        "Tosa": 0,
-        "Hidratação": 0,
-        "Taxa Higiênica": 0
-    }
+    st.divider()
 
-    resultados = []
-    total = 0
+    st.subheader("Carregar Arquivo CSV")
 
-    for categoria in categorias:
+    arquivo = st.file_uploader("Selecione o arquivo CSV", type=["csv"])
 
-        st.subheader(categoria)
+    if arquivo:
 
-        col1, col2, col3 = st.columns(3)
+        try:
+            df = pd.read_csv(arquivo)
 
-        qtd = col1.number_input("Quantidade", min_value=0, key=f"qtd_{categoria}")
-        meta = col2.number_input("Meta", min_value=0, key=f"meta_{categoria}")
-        perc = col3.number_input("% Comissão", min_value=0.0, key=f"perc_{categoria}")
+            colunas_necessarias = [
+                "servico",
+                "quantidade",
+                "meta",
+                "valor_unitario",
+                "percentual_comissao"
+            ]
 
-        progresso = (qtd / meta) if meta > 0 else 0
+            if not all(col in df.columns for col in colunas_necessarias):
+                st.error("O CSV precisa conter as colunas: servico, quantidade, meta, valor_unitario, percentual_comissao")
+                return
 
-        st.progress(min(progresso, 1.0))
+            df["comissao"] = df["quantidade"] * df["valor_unitario"] * (df["percentual_comissao"] / 100)
 
-        valor_unitario = st.number_input("Valor Unitário", min_value=0.0, key=f"valor_{categoria}")
+            total_comissao = df["comissao"].sum()
 
-        comissao = qtd * valor_unitario * (perc / 100)
-        total += comissao
+            st.subheader("Resumo por Serviço")
 
-        st.metric("Comissão", f"R$ {comissao:,.2f}")
+            for _, row in df.iterrows():
 
-        resultados.append({
-            "categoria": categoria,
-            "qtd": qtd,
-            "meta": meta,
-            "percentual": perc,
-            "comissao": comissao
-        })
+                progresso = row["quantidade"] / row["meta"] if row["meta"] > 0 else 0
 
-        st.divider()
+                st.markdown(f"### {row['servico']}")
+                st.progress(min(progresso, 1.0))
+                st.metric("Comissão", f"R$ {row['comissao']:,.2f}")
+                st.divider()
 
-    st.success(f"Comissão Total: R$ {total:,.2f}")
+            st.success(f"Comissão Total: R$ {total_comissao:,.2f}")
 
-    if st.button("Gerar PDF"):
-        caminho = gerar_pdf(nome, mes, resultados, total)
+            if st.button("Gerar PDF"):
+                resultados = df.to_dict("records")
+                caminho = gerar_pdf(nome, mes, resultados, total_comissao)
 
-        with open(caminho, "rb") as f:
-            st.download_button(
-                "Baixar Relatório",
-                f,
-                file_name=f"relatorio_{nome}_{mes}.pdf",
-                mime="application/pdf"
-            )
+                with open(caminho, "rb") as f:
+                    st.download_button(
+                        "Baixar Relatório",
+                        f,
+                        file_name=f"relatorio_{nome}_{mes}.pdf",
+                        mime="application/pdf"
+                    )
+
+        except Exception:
+            st.error("Erro ao processar o arquivo.")
 
 # =========================
 # CONTROLE
