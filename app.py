@@ -1,3 +1,5 @@
+import os
+st.write(os.listdir())
 import streamlit as st
 import pandas as pd
 from utils.comissao import calcular_comissao
