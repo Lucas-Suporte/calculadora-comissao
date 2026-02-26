@@ -1,158 +1,229 @@
 import streamlit as st
 import pandas as pd
+import json
+import os
 from utils.comissao import calcular_comissao
+from utils.relatorio import gerar_pdf
 
-# ==========================================
-# CONFIGURAÇÃO DA PÁGINA
-# ==========================================
+st.set_page_config(page_title="Sistema de Comissão PET247", layout="wide")
 
-st.set_page_config(
-    page_title="Sistema de Comissão",
-    layout="wide"
-)
+ARQUIVO_USUARIOS = "usuarios.json"
 
-# ==========================================
-# CONTROLE DE LOGIN
-# ==========================================
+# =========================
+# GARANTE ADMIN FIXO
+# =========================
 
-USUARIOS = {
-    "admin": "1234",
-    "gerente": "pet247"
-}
+def inicializar_admin():
+    if not os.path.exists(ARQUIVO_USUARIOS):
+        with open(ARQUIVO_USUARIOS, "w") as f:
+            json.dump({}, f)
 
-if "logado" not in st.session_state:
-    st.session_state.logado = False
+    with open(ARQUIVO_USUARIOS, "r") as f:
+        usuarios = json.load(f)
 
-if "usuario" not in st.session_state:
-    st.session_state.usuario = ""
+    if "pet247market" not in usuarios:
+        usuarios["pet247market"] = {
+            "senha": "1234",
+            "tipo": "admin"
+        }
+        with open(ARQUIVO_USUARIOS, "w") as f:
+            json.dump(usuarios, f)
 
-def login():
-    st.title("Acesso ao Sistema")
+inicializar_admin()
 
-    usuario = st.text_input("Usuário")
-    senha = st.text_input("Senha", type="password")
+# =========================
+# FUNÇÕES USUÁRIO
+# =========================
 
-    if st.button("Entrar"):
-        if usuario in USUARIOS and USUARIOS[usuario] == senha:
-            st.session_state.logado = True
-            st.session_state.usuario = usuario
-            st.rerun()
-        else:
-            st.error("Usuário ou senha inválidos")
+def carregar_usuarios():
+    with open(ARQUIVO_USUARIOS, "r") as f:
+        return json.load(f)
 
-if not st.session_state.logado:
-    login()
-    st.stop()
+def salvar_usuarios(usuarios):
+    with open(ARQUIVO_USUARIOS, "w") as f:
+        json.dump(usuarios, f)
 
-# ==========================================
-# SIDEBAR
-# ==========================================
+def autenticar(usuario, senha):
+    usuarios = carregar_usuarios()
+    if usuario in usuarios and usuarios[usuario]["senha"] == senha:
+        return {"usuario": usuario, "tipo": usuarios[usuario]["tipo"]}
+    return None
 
-with st.sidebar:
+def cadastrar_usuario(usuario, senha):
+    usuarios = carregar_usuarios()
+    if usuario in usuarios:
+        return False
+    usuarios[usuario] = {"senha": senha, "tipo": "usuario"}
+    salvar_usuarios(usuarios)
+    return True
 
-    st.image("assets/logo.png", use_container_width=True)
+def excluir_usuario(usuario):
+    if usuario == "pet247market":
+        return
+    usuarios = carregar_usuarios()
+    usuarios.pop(usuario)
+    salvar_usuarios(usuarios)
 
-    st.markdown("---")
-    st.markdown(f"**Usuário:** {st.session_state.usuario}")
-    st.markdown("---")
+# =========================
+# SESSÃO
+# =========================
 
-    if st.button("Sair"):
-        st.session_state.logado = False
-        st.session_state.usuario = ""
-        st.rerun()
+if "usuario_logado" not in st.session_state:
+    st.session_state.usuario_logado = None
 
-# ==========================================
-# ESTILO VISUAL
-# ==========================================
+# =========================
+# LOGIN
+# =========================
 
-st.markdown("""
-<style>
-body {
-    background-color: #F8FAFC;
-}
+def tela_login():
+    st.title("Sistema de Comissão PET247")
 
-.main-title {
-    text-align: center;
-    color: #1E293B;
-    font-size: 32px;
-    font-weight: 700;
-    margin-bottom: 30px;
-}
+    aba = st.radio("Selecione:", ["Login", "Cadastrar"])
 
-.card {
-    background-color: #FFFFFF;
-    padding: 20px;
-    border-radius: 12px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    margin-bottom: 20px;
-}
+    if aba == "Login":
+        usuario = st.text_input("Usuário")
+        senha = st.text_input("Senha", type="password")
 
-.card h3 {
-    color: #1E293B;
-    font-size: 18px;
-    margin-bottom: 10px;
-}
+        if st.button("Entrar"):
+            dados = autenticar(usuario, senha)
+            if dados:
+                st.session_state.usuario_logado = dados
+                st.rerun()
+            else:
+                st.error("Credenciais inválidas.")
 
-.card p {
-    color: #64748B;
-    font-size: 14px;
-}
+    else:
+        novo = st.text_input("Novo Usuário")
+        senha = st.text_input("Senha", type="password")
 
-.highlight {
-    font-weight: bold;
-    color: #059669;
-}
-</style>
-""", unsafe_allow_html=True)
+        if st.button("Cadastrar"):
+            if cadastrar_usuario(novo, senha):
+                st.success("Usuário criado com sucesso.")
+            else:
+                st.error("Usuário já existe.")
 
-# ==========================================
-# DASHBOARD PRINCIPAL
-# ==========================================
+# =========================
+# ADMIN
+# =========================
 
-st.markdown('<div class="main-title">Relatório de Comissão</div>', unsafe_allow_html=True)
+def area_admin():
+    st.header("Painel Administrativo")
 
-nome = st.text_input("Nome do Funcionário")
-mes = st.text_input("Mês de Referência")
-arquivo = st.file_uploader("Envie a planilha CSV", type="csv")
+    usuarios = carregar_usuarios()
 
-if arquivo:
+    for user, dados in usuarios.items():
 
-    try:
-        df = pd.read_csv(arquivo, sep=None, engine="python")
-        resultados, total_comissao, total_faturamento = calcular_comissao(df)
-
-        st.markdown("## Resumo Geral")
-
-        st.markdown(f"""
-        <div class="card">
-            <h3>{nome}</h3>
-            <p>Mês: {mes}</p>
-            <p>Faturamento Total: <span class="highlight">R$ {total_faturamento:,.2f}</span></p>
-            <p>Comissão Final: <span class="highlight">R$ {total_comissao:,.2f}</span></p>
-        </div>
-        """, unsafe_allow_html=True)
-
-        st.markdown("## Detalhamento por Categoria")
+        st.subheader(user)
 
         col1, col2, col3 = st.columns(3)
 
-        for i, r in enumerate(resultados):
+        nova_senha = col1.text_input("Nova senha", key=f"senha_{user}")
 
-            card_html = f"""
-            <div class="card">
-                <h3>{r['categoria']}</h3>
-                <p>Quantidade de Serviços: <span class="highlight">{r['qtd']}</span></p>
-                <p>Meta Atingida: <span class="highlight">{r['meta']} ({r['percentual']}%)</span></p>
-                <p>Comissão: <span class="highlight">R$ {r['comissao']:,.2f}</span></p>
-            </div>
-            """
+        novo_tipo = col2.selectbox(
+            "Tipo",
+            ["usuario", "admin"],
+            index=0 if dados["tipo"] == "usuario" else 1,
+            key=f"tipo_{user}"
+        )
 
-            if i % 3 == 0:
-                col1.markdown(card_html, unsafe_allow_html=True)
-            elif i % 3 == 1:
-                col2.markdown(card_html, unsafe_allow_html=True)
-            else:
-                col3.markdown(card_html, unsafe_allow_html=True)
+        if col3.button("Excluir", key=f"del_{user}"):
+            excluir_usuario(user)
+            st.success("Usuário excluído.")
+            st.rerun()
 
-    except Exception as e:
-        st.error(f"Erro ao processar CSV: {e}")
+        if st.button(f"Atualizar {user}", key=f"update_{user}"):
+            usuarios[user]["tipo"] = novo_tipo
+            if nova_senha:
+                usuarios[user]["senha"] = nova_senha
+            salvar_usuarios(usuarios)
+            st.success("Atualizado com sucesso.")
+            st.rerun()
+
+        st.divider()
+
+# =========================
+# DASHBOARD
+# =========================
+
+def dashboard():
+
+    usuario = st.session_state.usuario_logado
+
+    with st.sidebar:
+        st.write(f"Usuário: {usuario['usuario']}")
+        st.write(f"Tipo: {usuario['tipo']}")
+
+        if usuario["tipo"] == "admin":
+            menu = st.radio("Menu", ["Comissão", "Administrador"])
+        else:
+            menu = "Comissão"
+
+        if st.button("Logout"):
+            st.session_state.usuario_logado = None
+            st.rerun()
+
+    if usuario["tipo"] == "admin" and menu == "Administrador":
+        area_admin()
+        return
+
+    st.title("Dashboard Automático de Comissão")
+
+    nome = st.text_input("Nome do Funcionário")
+    mes = st.text_input("Mês de Referência")
+
+    st.divider()
+
+    st.subheader("Carregar CSV do Sistema")
+
+    arquivo = st.file_uploader("Selecione o arquivo CSV", type=["csv"])
+
+    if arquivo:
+
+        try:
+            df = pd.read_csv(arquivo)
+
+            resultados, total_comissao, total_faturamento = calcular_comissao(df)
+
+            st.subheader("Resumo por Categoria")
+
+            for item in resultados:
+
+                if item["meta"] == "Super Meta":
+                    progresso = 1.0
+                elif item["meta"] == "Meta":
+                    progresso = 0.7
+                else:
+                    progresso = 0.4
+
+                st.markdown(f"### {item['categoria']}")
+                st.progress(progresso)
+                st.metric(
+                    f"{item['meta']} ({item['percentual']}%)",
+                    f"R$ {item['comissao']:,.2f}"
+                )
+                st.divider()
+
+            st.success(f"Comissão Total: R$ {total_comissao:,.2f}")
+
+            if st.button("Gerar PDF"):
+                caminho = gerar_pdf(nome, mes, resultados, total_comissao)
+
+                with open(caminho, "rb") as f:
+                    st.download_button(
+                        "Baixar Relatório",
+                        f,
+                        file_name=f"relatorio_{nome}_{mes}.pdf",
+                        mime="application/pdf"
+                    )
+
+        except Exception as e:
+            st.error(f"Erro ao processar arquivo: {e}")
+
+# =========================
+# CONTROLE PRINCIPAL
+# =========================
+
+if st.session_state.usuario_logado:
+    dashboard()
+else:
+    tela_login()
