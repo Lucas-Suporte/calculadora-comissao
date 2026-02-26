@@ -1,93 +1,93 @@
 import streamlit as st
 import pandas as pd
-from database import criar_tabela_usuarios
-from auth import cadastrar_usuario, login
 from utils.comissao import calcular_comissao
 
-st.set_page_config(page_title="Sistema PET247", layout="wide")
+st.set_page_config(page_title="Relatório de Comissão", layout="wide")
 
-criar_tabela_usuarios()
+st.markdown("""
+<style>
+body {
+    background-color: #F8FAFC;
+}
 
-# =========================
-# CONTROLE DE SESSÃO
-# =========================
-if "usuario" not in st.session_state:
-    st.session_state.usuario = None
+.main-title {
+    text-align: center;
+    color: #1E293B;
+    font-size: 32px;
+    font-weight: 700;
+    margin-bottom: 30px;
+}
 
-# =========================
-# TELA DE LOGIN
-# =========================
-if st.session_state.usuario is None:
+.card {
+    background-color: #FFFFFF;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    margin-bottom: 20px;
+}
 
-    st.title("Login - Sistema PET247")
+.card h3 {
+    color: #1E293B;
+    font-size: 18px;
+    margin-bottom: 10px;
+}
 
-    email = st.text_input("E-mail")
-    senha = st.text_input("Senha", type="password")
+.card p {
+    color: #64748B;
+    font-size: 14px;
+}
 
-    if st.button("Entrar"):
-        usuario = login(email, senha)
+.highlight {
+    font-weight: bold;
+    color: #059669;
+}
+</style>
+""", unsafe_allow_html=True)
 
-        if usuario:
-            st.session_state.usuario = usuario
-            st.success("Login realizado com sucesso.")
-            st.rerun()
-        else:
-            st.error("E-mail ou senha inválidos.")
+st.markdown('<div class="main-title">Relatório de Comissão</div>', unsafe_allow_html=True)
 
-    st.markdown("---")
-    st.subheader("Cadastrar Usuário (primeiro acesso)")
+nome = st.text_input("Nome do Funcionário")
+mes = st.text_input("Mês de Referência")
+arquivo = st.file_uploader("Envie a planilha CSV", type="csv")
 
-    nome = st.text_input("Nome")
-    novo_email = st.text_input("Novo E-mail")
-    nova_senha = st.text_input("Nova Senha", type="password")
+if arquivo:
 
-    if st.button("Cadastrar"):
-        cadastrar_usuario(nome, novo_email, nova_senha, "admin")
-        st.success("Usuário cadastrado com sucesso.")
+    try:
+        df = pd.read_csv(arquivo, sep=None, engine="python")
+        resultados, total_comissao, total_faturamento = calcular_comissao(df)
 
-# =========================
-# ÁREA PROTEGIDA
-# =========================
-else:
+        st.markdown("## Resumo Geral")
 
-    st.sidebar.title("Menu")
-    st.sidebar.write(f"Usuário: {st.session_state.usuario['nome']}")
+        st.markdown(f"""
+        <div class="card">
+            <h3>{nome}</h3>
+            <p>Mês: {mes}</p>
+            <p>Faturamento Total: <span class="highlight">R$ {total_faturamento:,.2f}</span></p>
+            <p>Comissão Final: <span class="highlight">R$ {total_comissao:,.2f}</span></p>
+        </div>
+        """, unsafe_allow_html=True)
 
-    if st.sidebar.button("Logout"):
-        st.session_state.usuario = None
-        st.rerun()
+        st.markdown("## Detalhamento por Categoria")
 
-    st.title("Dashboard de Comissão PET247")
+        col1, col2, col3 = st.columns(3)
 
-    funcionario = st.text_input("Nome do Funcionário")
-    mes = st.text_input("Mês de Referência")
-    uploaded_file = st.file_uploader("Enviar arquivo CSV", type=["csv"])
+        for i, r in enumerate(resultados):
 
-    if uploaded_file and funcionario and mes:
+            card_html = f"""
+            <div class="card">
+                <h3>{r['categoria']}</h3>
+                <p>Quantidade de Serviços: <span class="highlight">{r['qtd']}</span></p>
+                <p>Meta Atingida: <span class="highlight">{r['meta']} ({r['percentual']}%)</span></p>
+                <p>Comissão: <span class="highlight">R$ {r['comissao']:,.2f}</span></p>
+            </div>
+            """
 
-        try:
-            df = pd.read_csv(uploaded_file)
+            if i % 3 == 0:
+                col1.markdown(card_html, unsafe_allow_html=True)
+            elif i % 3 == 1:
+                col2.markdown(card_html, unsafe_allow_html=True)
+            else:
+                col3.markdown(card_html, unsafe_allow_html=True)
 
-            resultados, total_comissao, total_faturamento = calcular_comissao(df)
-
-            st.markdown("---")
-            st.subheader("Resumo Geral")
-
-            col1, col2 = st.columns(2)
-            col1.metric("Comissão Total", f"R$ {total_comissao:,.2f}")
-            col2.metric("Faturamento Total", f"R$ {total_faturamento:,.2f}")
-
-            st.markdown("---")
-            st.subheader("Detalhamento por Serviço")
-
-            for item in resultados:
-                st.write(
-                    f"**{item['categoria']}** | "
-                    f"Qtd: {item['qtd']} | "
-                    f"{item['meta']} ({item['percentual']}%) | "
-                    f"Faturamento: R$ {item['faturamento']:,.2f} | "
-                    f"Comissão: R$ {item['comissao']:,.2f}"
-                )
-
-        except Exception as e:
-            st.error(f"Erro ao processar arquivo: {e}")
+    except Exception as e:
+        st.error(f"Erro ao processar CSV: {e}")
